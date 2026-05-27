@@ -247,6 +247,10 @@ export async function POST(request: NextRequest) {
 
     // --- Live mode ---
 
+    if (!CONTRACT_APP_ID) {
+      throw new Error("Loot box contract is not configured.");
+    }
+
     // Verify the payment is in an atomic group (payment + app call commit)
     if (!txnInfo.group) {
       throw new Error("Payment must be part of a commit transaction group.");
