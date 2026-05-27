@@ -173,11 +173,15 @@ Deploy your own instance of the commit-reveal contract before enabling live loot
 Summary:
 
 ```bash
-# Install TEALScript compiler
-npm install -g @algorandfoundation/tealscript
+# Pre-compiled TEAL artifacts are included -- you only need to recompile if
+# you modify the contract source.
 
-# Compile
-npx tealscript contracts/lootbox-commit-reveal/contract.algo.ts contracts/lootbox-commit-reveal/artifacts
+# (Optional) Install TEALScript compiler
+npm install --save-dev @algorandfoundation/tealscript
+
+# (Optional) Recompile -- run from the contracts/ directory
+cd contracts
+npx tealscript lootbox-commit-reveal/contract.algo.ts lootbox-commit-reveal/artifacts --skip-algod
 
 # Deploy using AlgoKit or goal
 # createApplication requires: treasury address, crate price in microALGO
@@ -216,7 +220,7 @@ This lets you develop the UI, test wallet integration, and verify payment flows 
 ### Built-In Protections
 
 - **Server-side secrets** -- `MANAGER_MNEMONIC` and `LOOTBOX_MASTER_MNEMONIC` are used only in API routes and server actions. They do not have the `NEXT_PUBLIC_` prefix, so Next.js never bundles them into client-side JavaScript.
-- **Payment verification** -- The server verifies every payment on-chain via the indexer with a retry loop (handles indexer lag). Checks sender, receiver, amount, transaction type, and rejects transactions with `rekey-to` or `close-remainder-to` fields. Enforces a 5-minute maximum transaction age.
+- **Payment verification** -- The server verifies every payment on-chain via the indexer with a retry loop (handles indexer lag). Checks sender, receiver, amount, transaction type, and rejects transactions with `rekey-to` or `close-remainder-to` fields. Enforces a maximum transaction age (10 minutes for payments to accommodate crash-recovery retries, 5 minutes for reveal transactions).
 - **NFT ownership verification** -- The mint endpoint confirms the user's wallet actually holds the NFT before applying trait changes.
 - **Transaction replay prevention** -- Used transaction IDs are tracked in memory and rejected if resubmitted. Entries are pruned after one hour. Claimed IDs are released on all error paths so users can retry.
 - **Rate limiting** -- Every API route has per-wallet or per-IP rate limiting with automatic pruning.
@@ -225,6 +229,7 @@ This lets you develop the UI, test wallet integration, and verify payment flows 
 - **Safe error messages** -- API routes return only pre-approved error strings to the client, preventing internal details from leaking.
 - **Path traversal protection** -- Trait names are sanitized before constructing layer image URLs, stripping `../`, `/`, `\`, `:`, and null bytes.
 - **Wallet separation** -- The template recommends using separate wallets for the manager (metadata authority) and the master (prize pool), limiting blast radius if a key is compromised.
+- **Crash recovery** -- If the browser closes or refreshes mid-flow, the pending reveal state is persisted in `sessionStorage`. On reload the UI resumes from where the user left off (VRF wait or server reveal), so committed ALGO is not lost.
 - **Loot box pause switch** -- Set `LOOTBOX_PAUSED=true` to immediately halt new commits and reveals without redeploying.
 - **On-chain randomness** -- In live mode, randomness is generated entirely by the smart contract via VRF seed extraction. The server reads the ABI return value from the confirmed reveal transaction -- it never touches the VRF seed directly. There is no fallback to server-side `crypto.randomBytes` in live mode.
 - **Contract-enforced payment** -- The smart contract's `commit()` method verifies the preceding payment in the atomic group (correct receiver, amount, sender). No one can commit without paying. A second commit is rejected if the sender already has an active commit box, preventing silent payment loss.
@@ -305,6 +310,8 @@ config/                             All customizable configuration (see above)
 contracts/
   lootbox-commit-reveal/
     contract.algo.ts                TEALScript commit-reveal smart contract
+    artifacts/                      Pre-compiled TEAL, ARC-32/ARC-56 app specs, source map
+  tsconfig.json                     TEALScript compiler config (excluded from Next.js build)
 
 contexts/
   wallet-context.tsx                Wallet provider (Pera/Defly/Lute)
