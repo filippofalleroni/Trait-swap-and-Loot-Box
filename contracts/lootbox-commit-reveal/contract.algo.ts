@@ -1,27 +1,30 @@
 // Commit-reveal contract for loot box randomness on Algorand.
 //
-// The PCG32 pseudo-random number generator used here is based on
-// lib-pcg-avm by Giorgio Ciotti (https://github.com/CiottiGiorgio/lib-pcg-avm),
-// an open-source PCG implementation for the Algorand Virtual Machine.
+// Uses a commit-reveal pattern with Algorand's VRF beacon: the user
+// commits (records the current round), waits at least 8 rounds, then
+// reveals to read the VRF seed from the block after their commit.
+// The VRF seed is already cryptographically random, so we extract a
+// uint64 directly — no additional PRNG layer is needed for a single
+// random value per reveal.
 //
-// This contract wraps PCG32 in a commit-reveal pattern: the user commits,
-// waits N rounds, then reveals to derive randomness from Algorand's VRF
-// beacon seed. Users may need to modify and deploy their own version.
+// If you need MULTIPLE random values from a single seed (e.g. rolling
+// several dice in one transaction), use lib-pcg-avm by Giorgio Ciotti:
+// https://github.com/CiottiGiorgio/lib-pcg-avm
+//
+// Algorand only retains block headers for ~1000 rounds. If a user
+// waits too long after committing, the VRF seed becomes inaccessible.
+// The reclaim() method lets users clean up expired commits so they
+// can recommit.
 
 import { Contract } from "@algorandfoundation/tealscript";
 
-class LootBoxCommitReveal extends Contract {
-  // PCG32 state
-  pcgState = GlobalStateKey<uint64>();
-  pcgInc = GlobalStateKey<uint64>();
+const MIN_WAIT_ROUNDS = 8;
+const EXPIRY_ROUNDS = 900;
 
-  // Commit-reveal: maps each sender address to the round they committed at
+class LootBoxCommitReveal extends Contract {
   commitRound = BoxMap<Address, uint64>();
 
-  createApplication(): void {
-    this.pcgState.value = 0;
-    this.pcgInc.value = 0;
-  }
+  createApplication(): void {}
 
   commit(): void {
     this.commitRound(this.txn.sender).value = globals.round;
@@ -29,24 +32,20 @@ class LootBoxCommitReveal extends Contract {
 
   reveal(): uint64 {
     const committed = this.commitRound(this.txn.sender).value;
-    assert(globals.round > committed + 8, "Must wait at least 8 rounds");
 
-    // Use VRF output from the block after commitment for randomness
+    assert(globals.round > committed + MIN_WAIT_ROUNDS, "Must wait at least 8 rounds after commit");
+    assert(globals.round < committed + EXPIRY_ROUNDS, "Commit expired — call reclaim() and recommit");
+
     const seed = blocks[committed + 1].seed;
-    const randomValue = this.pcg32(seed);
+    const randomValue = btoi(extract3(seed, 0, 8));
 
     this.commitRound(this.txn.sender).delete();
     return randomValue;
   }
 
-  private pcg32(seed: bytes): uint64 {
-    // PCG32 implementation using the VRF seed as entropy source
-    const state = btoi(extract3(seed, 0, 8));
-    const oldstate = state;
-    this.pcgState.value =
-      oldstate * 6364136223846793005 + (this.pcgInc.value | 1);
-    const xorshifted = (((oldstate >> 18) ^ oldstate) >> 27) as uint64;
-    const rot = (oldstate >> 59) as uint64;
-    return (xorshifted >> rot) | (xorshifted << ((-rot) & 31));
+  reclaim(): void {
+    const committed = this.commitRound(this.txn.sender).value;
+    assert(globals.round >= committed + EXPIRY_ROUNDS, "Commit has not expired yet");
+    this.commitRound(this.txn.sender).delete();
   }
 }

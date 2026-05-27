@@ -46,6 +46,8 @@ export type NftMetadata = {
 export type TraitRegistryItem = {
   registryId: string;
   assetId?: number;
+  /** Links this registry entry back to a mock trait id during development. */
+  mockTraitId?: string;
   name: string;
   category: OfficialTraitCategory;
   rarity: TraitRarity;
@@ -54,6 +56,11 @@ export type TraitRegistryItem = {
   imagePath: string;
   imageMimeType: "image/png";
   enabled: boolean;
+  /**
+   * "mock" = trait backed by mock data (development / preview).
+   * "nft"  = trait backed by a real minted ASA on-chain.
+   */
+  source: "mock" | "nft";
 };
 
 export type PrizeType = "token" | "nft";

@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import Providers from "@/components/providers";
 import Header from "@/components/header";
+import Footer from "@/components/footer";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -15,14 +17,15 @@ export const metadata: Metadata = {
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <html lang="en" className={inter.className}>
-      <body className="min-h-screen bg-zinc-950">
+      <body className="flex min-h-screen flex-col bg-zinc-950">
         <Providers>
           <Header />
-          {children}
+          <div className="flex flex-1 flex-col">{children}</div>
+          <Footer />
         </Providers>
       </body>
     </html>

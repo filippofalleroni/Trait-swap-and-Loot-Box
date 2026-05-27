@@ -28,22 +28,54 @@ export function resolvePrize(
     throw new Error("Cannot resolve a prize from an empty prize list.");
   }
 
-  const totalWeight = prizes.reduce((sum, p) => sum + p.weight, 0);
+  const totalWeight = prizes.reduce(function (sum, p) {
+    return sum + p.weight;
+  }, 0);
 
   if (totalWeight <= 0) {
     throw new Error("Total prize weight must be greater than zero.");
   }
 
-  const target = randomValue * totalWeight;
+  // Normalize the random value into the weight range, handling values
+  // outside [0, 1) safely via modulo (mirrors production behavior with
+  // on-chain randomness beacons that may yield arbitrary integers).
+  const bounded =
+    ((randomValue * totalWeight) % totalWeight + totalWeight) % totalWeight;
   let cumulative = 0;
 
-  for (const prize of prizes) {
-    cumulative += prize.weight;
-    if (target < cumulative) {
-      return prize;
+  for (let i = 0; i < prizes.length; i++) {
+    cumulative += prizes[i].weight;
+    if (bounded < cumulative) {
+      return prizes[i];
     }
   }
 
   // Fallback: return the last prize (handles floating-point edge cases)
   return prizes[prizes.length - 1];
+}
+
+/**
+ * Calculate the percentage odds for each prize tier.
+ *
+ * Useful for displaying prize probabilities in the UI.
+ *
+ * @param prizes - Array of prize tiers with weight values
+ * @returns Each prize tier augmented with a `chance` field (percentage, 2 decimal places)
+ */
+export function getPrizeOdds(
+  prizes: PrizeTier[]
+): Array<PrizeTier & { chance: number }> {
+  const totalWeight = prizes.reduce(function (sum, p) {
+    return sum + p.weight;
+  }, 0);
+
+  return prizes.map(function (prize) {
+    return {
+      ...prize,
+      chance:
+        totalWeight > 0
+          ? Math.round((prize.weight / totalWeight) * 10000) / 100
+          : 0,
+    };
+  });
 }

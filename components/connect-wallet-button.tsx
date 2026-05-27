@@ -29,6 +29,7 @@ function ConnectWalletButtonInner({
     isConnected,
     isConnecting,
     walletAddress,
+    walletDisplayName,
     activeWalletName,
     connectWallet,
     disconnectWallet,
@@ -45,11 +46,11 @@ function ConnectWalletButtonInner({
     if (!isMounted) return "Connect Wallet";
     if (isConnecting) return "Connecting...";
     if (isConnected)
-      return activeWalletName
-        ? `${activeWalletName} · ${shortAddress(walletAddress)}`
-        : shortAddress(walletAddress) ?? "Connected";
+      return (
+        walletDisplayName ?? shortAddress(walletAddress) ?? "Connected"
+      );
     return "Connect Wallet";
-  }, [isConnected, isConnecting, isMounted, walletAddress, activeWalletName]);
+  }, [isConnected, isConnecting, isMounted, walletAddress, walletDisplayName]);
 
   async function handleConnect(walletId: "pera" | "defly" | "lute") {
     try {
@@ -75,7 +76,7 @@ function ConnectWalletButtonInner({
             return;
           }
           setIsLogoutOpen(false);
-          setIsMenuOpen((v) => !v);
+          setIsMenuOpen((prev) => !prev);
         }}
         className={btnBase}
         style={{ borderColor: accent, color: accent }}

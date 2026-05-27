@@ -2,16 +2,17 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { SITE_NAME } from "@/config/site";
 import { ConnectWalletButton } from "@/components/connect-wallet-button";
 
 const NAV_LINKS = [
   { href: "/trait-lab", label: "Trait Lab" },
   { href: "/lootbox", label: "Loot Box" },
-  { href: "/admin", label: "Admin" },
 ];
 
 export default function Header() {
+  const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
@@ -24,15 +25,22 @@ export default function Header() {
 
         {/* Desktop nav */}
         <nav className="hidden md:flex items-center gap-6">
-          {NAV_LINKS.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="text-sm text-zinc-400 hover:text-zinc-100 transition-colors"
-            >
-              {link.label}
-            </Link>
-          ))}
+          {NAV_LINKS.map((link) => {
+            const active = pathname.startsWith(link.href);
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={`text-sm transition-colors ${
+                  active
+                    ? "text-indigo-400"
+                    : "text-zinc-400 hover:text-zinc-100"
+                }`}
+              >
+                {link.label}
+              </Link>
+            );
+          })}
         </nav>
 
         {/* Desktop wallet button */}
@@ -68,16 +76,23 @@ export default function Header() {
       {mobileOpen && (
         <div className="md:hidden border-t border-zinc-800 bg-zinc-950 px-4 pb-4 pt-2">
           <nav className="flex flex-col gap-3">
-            {NAV_LINKS.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                onClick={() => setMobileOpen(false)}
-                className="text-sm text-zinc-400 hover:text-zinc-100 transition-colors"
-              >
-                {link.label}
-              </Link>
-            ))}
+            {NAV_LINKS.map((link) => {
+              const active = pathname.startsWith(link.href);
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  onClick={() => setMobileOpen(false)}
+                  className={`text-sm transition-colors ${
+                    active
+                      ? "text-indigo-400"
+                      : "text-zinc-400 hover:text-zinc-100"
+                  }`}
+                >
+                  {link.label}
+                </Link>
+              );
+            })}
           </nav>
           <div className="mt-4">
             <ConnectWalletButton />

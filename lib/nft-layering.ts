@@ -26,6 +26,18 @@ export function isOfficialTraitCategory(
 }
 
 /**
+ * Sanitize a trait name for use in URL paths.
+ * Removes path traversal sequences and unsafe characters.
+ */
+function sanitizeTraitName(name: string): string {
+  // Remove path traversal sequences and null bytes
+  return name
+    .replace(/\.\./g, "")
+    .replace(/[/\\:\0]/g, "")
+    .trim();
+}
+
+/**
  * Returns the canonical image URL for a trait layer.
  *
  * @example
@@ -36,7 +48,8 @@ export function getTraitLayerImageUrl(
   category: OfficialTraitCategory,
   traitName: string
 ): string {
-  return `/traits/${category}/${traitName}.png`;
+  const safeName = sanitizeTraitName(traitName);
+  return `/traits/${category}/${safeName}.png`;
 }
 
 /**
@@ -49,22 +62,23 @@ export function getTraitLayerImageCandidates(
   category: OfficialTraitCategory,
   traitName: string
 ): { src: string; key: string }[] {
+  const safeName = sanitizeTraitName(traitName);
   return [
     {
-      src: `/traits/${category}/${traitName}.png`,
-      key: `${category}-${traitName}-png`,
+      src: `/traits/${category}/${safeName}.png`,
+      key: `${category}-${safeName}-png`,
     },
     {
-      src: `/traits/${category}/${traitName.toLowerCase()}.png`,
-      key: `${category}-${traitName}-lower-png`,
+      src: `/traits/${category}/${safeName.toLowerCase()}.png`,
+      key: `${category}-${safeName}-lower-png`,
     },
     {
-      src: `/traits/${category}/${traitName.replace(/ /g, "-")}.png`,
-      key: `${category}-${traitName}-dashed-png`,
+      src: `/traits/${category}/${safeName.replace(/ /g, "-")}.png`,
+      key: `${category}-${safeName}-dashed-png`,
     },
     {
-      src: `/traits/${category}/${traitName.replace(/ /g, "_")}.png`,
-      key: `${category}-${traitName}-underscored-png`,
+      src: `/traits/${category}/${safeName.replace(/ /g, "_")}.png`,
+      key: `${category}-${safeName}-underscored-png`,
     },
   ];
 }

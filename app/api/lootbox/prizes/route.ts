@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
-import { lootboxConfig, totalPrizeWeight } from "@/config/lootbox";
-import type { PrizeTier } from "@/lib/types";
+import { NextRequest, NextResponse } from "next/server";
+import { totalPrizeWeight } from "@/config/lootbox";
+import { getPrizes } from "@/lib/lootbox-prize-store";
 
 /* ------------------------------------------------------------------ */
 /*  GET /api/lootbox/prizes                                           */
@@ -10,38 +10,50 @@ import type { PrizeTier } from "@/lib/types";
 /*  otherwise falls back to config/lootbox.ts.                        */
 /* ------------------------------------------------------------------ */
 
-const BLOB_TOKEN = process.env.BLOB_READ_WRITE_TOKEN ?? "";
-const BLOB_PRIZES_URL = process.env.LOOTBOX_PRIZES_BLOB_URL ?? "";
+export const dynamic = "force-dynamic";
 
-async function loadPrizesFromBlob(): Promise<PrizeTier[] | null> {
-  if (!BLOB_TOKEN || !BLOB_PRIZES_URL) return null;
+/* ------------------------------------------------------------------ */
+/*  Rate limiting (global by forwarded IP or fallback key)             */
+/* ------------------------------------------------------------------ */
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX = 30;
 
-  try {
-    const res = await fetch(BLOB_PRIZES_URL, {
-      headers: { Authorization: `Bearer ${BLOB_TOKEN}` },
-      next: { revalidate: 60 },
-    });
-
-    if (!res.ok) return null;
-
-    const data = await res.json();
-    if (Array.isArray(data)) return data as PrizeTier[];
-    if (data?.prizes && Array.isArray(data.prizes))
-      return data.prizes as PrizeTier[];
-
-    return null;
-  } catch {
-    return null;
-  }
+function pruneRateLimitMap() {
+  const now = Date.now();
+  rateLimitMap.forEach((entry, key) => {
+    if (now >= entry.resetAt) rateLimitMap.delete(key);
+  });
 }
 
-export async function GET() {
-  try {
-    // Try Blob storage first, fall back to config
-    const blobPrizes = await loadPrizesFromBlob();
-    const prizes: PrizeTier[] = blobPrizes ?? lootboxConfig.prizes;
+function isRateLimited(key: string): boolean {
+  const now = Date.now();
+  if (rateLimitMap.size > 1000) pruneRateLimitMap();
+  const entry = rateLimitMap.get(key);
+  if (!entry || now >= entry.resetAt) {
+    rateLimitMap.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return false;
+  }
+  entry.count++;
+  return entry.count > RATE_LIMIT_MAX;
+}
 
-    const total = prizes.reduce((sum, p) => sum + p.weight, 0) || totalPrizeWeight;
+function getClientKey(request: NextRequest): string {
+  return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+}
+
+export async function GET(request: NextRequest) {
+  if (isRateLimited(getClientKey(request))) {
+    return NextResponse.json(
+      { error: "Too many requests. Please wait a minute." },
+      { status: 429 }
+    );
+  }
+  try {
+    const prizes = await getPrizes();
+
+    const total =
+      prizes.reduce((sum, p) => sum + p.weight, 0) || totalPrizeWeight;
 
     const prizesWithChance = prizes.map((p) => ({
       ...p,
@@ -55,8 +67,9 @@ export async function GET() {
     });
   } catch (err: unknown) {
     console.error("[lootbox/prizes]", err);
-    const message =
-      err instanceof Error ? err.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to load prize data." },
+      { status: 500 }
+    );
   }
 }

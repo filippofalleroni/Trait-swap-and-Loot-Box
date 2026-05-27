@@ -5,6 +5,32 @@ import { getTreasuryAddress } from "@/lib/treasury";
 import { feeConfig } from "@/config/fees";
 import { mockTraits } from "@/config/mock-data";
 
+/* ------------------------------------------------------------------ */
+/*  Rate limiting                                                      */
+/* ------------------------------------------------------------------ */
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX = 10;
+
+function pruneRateLimitMap() {
+  const now = Date.now();
+  rateLimitMap.forEach((entry, key) => {
+    if (now >= entry.resetAt) rateLimitMap.delete(key);
+  });
+}
+
+function isRateLimited(key: string): boolean {
+  const now = Date.now();
+  if (rateLimitMap.size > 1000) pruneRateLimitMap();
+  const entry = rateLimitMap.get(key);
+  if (!entry || now >= entry.resetAt) {
+    rateLimitMap.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return false;
+  }
+  entry.count++;
+  return entry.count > RATE_LIMIT_MAX;
+}
+
 /**
  * POST /api/trait-lab/payment-tx
  *
@@ -43,6 +69,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (isRateLimited(walletAddress)) {
+      return NextResponse.json(
+        { error: "Too many requests. Please wait a minute." },
+        { status: 429 }
+      );
+    }
+
+    // Validate traitId format: alphanumeric, hyphens, underscores only (max 100 chars)
+    if (!/^[a-zA-Z0-9_-]{1,100}$/.test(newTraitId)) {
+      return NextResponse.json(
+        { error: "Invalid trait ID format." },
+        { status: 400 }
+      );
+    }
+
     // Determine the price for this trait
     let priceAlgo: number;
 
@@ -56,7 +97,7 @@ export async function POST(request: NextRequest) {
 
       if (!trait) {
         return NextResponse.json(
-          { error: `Trait '${newTraitId}' not found in registry` },
+          { error: "Trait not found in registry." },
           { status: 404 }
         );
       }

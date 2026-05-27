@@ -7,6 +7,41 @@ import type { PrizeTier } from "./types";
  * Sends the won prize (token transfer or NFT transfer) from the
  * master wallet to the winner's address.
  */
+
+/**
+ * Verify that the recipient has opted in to the prize asset before
+ * attempting the transfer. Throws if they have not.
+ */
+async function verifyRecipientOptedIn(
+  algodClient: algosdk.Algodv2,
+  recipientAddress: string,
+  assetId: number
+): Promise<void> {
+  try {
+    const accountInfo = await algodClient
+      .accountInformation(recipientAddress)
+      .do();
+    const assets = (
+      accountInfo as unknown as Record<string, unknown>
+    )["assets"] as Array<Record<string, unknown>> | undefined;
+
+    const assetMatch = assets?.some(function (a) {
+      const id = a["asset-id"] ?? a["assetId"] ?? a["asset_id"];
+      return Number(id) === assetId;
+    });
+    if (!assetMatch) {
+      throw new Error(
+        `Recipient has not opted into asset ${assetId}. Please opt in before claiming prizes.`
+      );
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("opted into")) {
+      throw error;
+    }
+    throw new Error("Failed to verify recipient asset opt-in status.");
+  }
+}
+
 export async function distributePrize({
   prize,
   recipientAddress,
@@ -20,28 +55,32 @@ export async function distributePrize({
 }): Promise<string> {
   const suggestedParams = await algodClient.getTransactionParams().do();
 
+  // Include the prize ID in the transaction note for audit trail
+  const note = new TextEncoder().encode(`lootbox-prize:${prize.id}`);
+
   let txn: algosdk.Transaction;
 
-  if (prize.type === "token") {
-    // ASA token transfer
-    txn = algosdk.makeAssetTransferTxnWithSuggestedParamsFromObject({
+  if (prize.assetId === 0) {
+    // ALGO prize — send a payment transaction (no opt-in needed)
+    txn = algosdk.makePaymentTxnWithSuggestedParamsFromObject({
       sender: masterAccount.addr,
       receiver: recipientAddress,
-      assetIndex: prize.assetId,
       amount: prize.amount,
       suggestedParams,
+      note,
     });
-  } else if (prize.type === "nft") {
-    // NFT transfer (amount is always 1 for NFTs)
+  } else {
+    // ASA prize — verify opt-in, then send asset transfer
+    await verifyRecipientOptedIn(algodClient, recipientAddress, prize.assetId);
+
     txn = algosdk.makeAssetTransferTxnWithSuggestedParamsFromObject({
       sender: masterAccount.addr,
       receiver: recipientAddress,
       assetIndex: prize.assetId,
-      amount: 1,
+      amount: prize.type === "nft" ? 1 : prize.amount,
       suggestedParams,
+      note,
     });
-  } else {
-    throw new Error(`Unknown prize type: ${prize.type}`);
   }
 
   const signedTxn = txn.signTxn(masterAccount.sk);

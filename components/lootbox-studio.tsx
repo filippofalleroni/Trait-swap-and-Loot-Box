@@ -38,6 +38,7 @@ interface PendingReveal {
 }
 
 const PENDING_KEY = "lootbox_pending_reveal";
+const MAX_GROUP_SIZE = 16;
 
 /* ------------------------------------------------------------------ */
 /*  Rarity helpers                                                    */
@@ -76,10 +77,40 @@ export default function LootboxStudio() {
 
   const [state, setState] = useState<LootboxState>("idle");
   const [prizes, setPrizes] = useState<PrizeTier[]>([]);
+  const [prizesLoaded, setPrizesLoaded] = useState(false);
   const [result, setResult] = useState<RevealResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showPrizes, setShowPrizes] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [cratesOpened, setCratesOpened] = useState(0);
+  const [buyerBalance, setBuyerBalance] = useState<number | null>(null);
+  const [pendingReveal, setPendingReveal] = useState<PendingReveal | null>(
+    () => {
+      if (typeof window === "undefined") return null;
+      try {
+        const stored = sessionStorage.getItem(PENDING_KEY);
+        return stored ? JSON.parse(stored) : null;
+      } catch {
+        return null;
+      }
+    }
+  );
+
+  /* ---------------------------------------------------------------- */
+  /*  Sync pendingReveal to sessionStorage                            */
+  /* ---------------------------------------------------------------- */
+
+  useEffect(() => {
+    try {
+      if (pendingReveal) {
+        sessionStorage.setItem(PENDING_KEY, JSON.stringify(pendingReveal));
+      } else {
+        sessionStorage.removeItem(PENDING_KEY);
+      }
+    } catch {
+      // sessionStorage not available
+    }
+  }, [pendingReveal]);
 
   /* ---------------------------------------------------------------- */
   /*  Load prizes                                                     */
@@ -90,34 +121,35 @@ export default function LootboxStudio() {
       .then((r) => r.json())
       .then((data) => {
         if (data.prizes) setPrizes(data.prizes);
+        setPrizesLoaded(true);
       })
       .catch(() => {
         // Fallback to config prizes
         setPrizes(lootboxConfig.prizes);
+        setPrizesLoaded(true);
       });
   }, []);
 
   /* ---------------------------------------------------------------- */
-  /*  Recover pending reveal from sessionStorage                      */
+  /*  Load buyer balance (community fund)                             */
   /* ---------------------------------------------------------------- */
 
   useEffect(() => {
-    if (!walletAddress) return;
-
-    try {
-      const raw = sessionStorage.getItem(PENDING_KEY);
-      if (!raw) return;
-
-      const pending: PendingReveal = JSON.parse(raw);
-      if (pending.walletAddress !== walletAddress) return;
-
-      // Attempt to complete the reveal
-      handleReveal(pending.walletAddress, pending.paymentTxId);
-    } catch {
-      sessionStorage.removeItem(PENDING_KEY);
+    async function loadBalance() {
+      try {
+        const res = await fetch("/api/lootbox/buyer-balance");
+        if (res.ok) {
+          const d = await res.json();
+          setBuyerBalance(d.balanceAlgo ?? 0);
+        }
+      } catch {
+        // non-critical
+      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [walletAddress]);
+    void loadBalance();
+    const interval = setInterval(loadBalance, 30_000);
+    return () => clearInterval(interval);
+  }, []);
 
   /* ---------------------------------------------------------------- */
   /*  Prize list grouped by rarity                                    */
@@ -125,10 +157,10 @@ export default function LootboxStudio() {
 
   const groupedPrizes = useMemo(() => {
     const groups: Partial<Record<PrizeRarity, PrizeTier[]>> = {};
-    for (const p of prizes) {
+    prizes.forEach((p) => {
       if (!groups[p.rarity]) groups[p.rarity] = [];
       groups[p.rarity]!.push(p);
-    }
+    });
     return groups;
   }, [prizes]);
 
@@ -159,9 +191,10 @@ export default function LootboxStudio() {
         }
 
         const data: RevealResult = await res.json();
+        setPendingReveal(null);
         setResult(data);
         setState("success");
-        sessionStorage.removeItem(PENDING_KEY);
+        setCratesOpened((c) => c + 1);
 
         // Refresh prizes (one-time prizes may have been removed)
         fetch("/api/lootbox/prizes")
@@ -182,160 +215,191 @@ export default function LootboxStudio() {
   /* ---------------------------------------------------------------- */
 
   const handleOpenLootBox = useCallback(async () => {
-    if (!walletAddress) return;
+    if (!walletAddress || !signTransactions) return;
 
     setError(null);
     setResult(null);
     setState("committing");
     setShowModal(true);
 
+    // If we have a pending reveal from a previous failed attempt, skip straight to reveal
+    const retrying =
+      pendingReveal && pendingReveal.walletAddress === walletAddress;
+    let paymentTxId = "";
+
     try {
-      /* 1. Fetch prize list for opt-in check */
-      const prizesRes = await fetch("/api/lootbox/prizes");
-      const prizesData = await prizesRes.json();
-      const prizeList: PrizeTier[] = prizesData.prizes ?? prizes;
-
-      /* 2. Check which prize assets need opt-in */
-      const uniqueAssetIds = Array.from(
-        new Set(prizeList.map((p) => p.assetId).filter((id) => id > 0))
-      );
-
       const algodClient = new algosdk.Algodv2("", ALGOD_BASE_URL, "");
-      let accountInfo: Record<string, unknown> = {};
 
+      /* 1. Fetch account info for opt-in check */
+      let accountInfo: Record<string, unknown> = {};
       try {
-        accountInfo = await algodClient.accountInformation(walletAddress).do() as unknown as Record<string, unknown>;
+        accountInfo = (await algodClient
+          .accountInformation(walletAddress)
+          .do()) as unknown as Record<string, unknown>;
       } catch {
         // Account may not exist yet
       }
 
       const heldAssets = new Set<number>();
-      const assets = accountInfo?.assets ?? accountInfo?.["created-assets"] ?? [];
+      const assets =
+        accountInfo?.assets ?? accountInfo?.["created-assets"] ?? [];
       if (Array.isArray(assets)) {
-        for (const a of assets) {
+        assets.forEach((a: Record<string, unknown>) => {
           const id = a?.["asset-id"] ?? a?.assetId;
+          // algosdk v3 returns bigint for assetId; accept both number and bigint
           if (typeof id === "number") heldAssets.add(id);
+          else if (typeof id === "bigint") heldAssets.add(Number(id));
+        });
+      }
+
+      /* 2. Determine which prize assets need opt-in */
+      const uniqueAssetIds = Array.from(
+        new Set(
+          prizes.map((p) => p.assetId).filter((id) => id > 0)
+        )
+      );
+      const needsOptIn = uniqueAssetIds.filter((id) => !heldAssets.has(id));
+
+      /* 3. Build opt-in transactions in groups of MAX_GROUP_SIZE */
+      const suggestedParams = await algodClient.getTransactionParams().do();
+      const optInGroups: algosdk.Transaction[][] = [];
+      for (let i = 0; i < needsOptIn.length; i += MAX_GROUP_SIZE) {
+        const batch = needsOptIn.slice(i, i + MAX_GROUP_SIZE);
+        const txns = batch.map((assetId) =>
+          algosdk.makeAssetTransferTxnWithSuggestedParamsFromObject({
+            sender: walletAddress,
+            receiver: walletAddress,
+            assetIndex: assetId,
+            amount: 0,
+            suggestedParams,
+          })
+        );
+        if (txns.length > 1) algosdk.assignGroupID(txns);
+        optInGroups.push(txns);
+      }
+
+      /* 4. Build payment/commit transactions (skip if retrying a pending reveal) */
+      let paymentTxns: algosdk.Transaction[] = [];
+      let commitData: { txIds: unknown[]; unsignedTxns: string[] } | null =
+        null;
+
+      if (retrying) {
+        paymentTxId = pendingReveal.paymentTxId;
+      } else {
+        const commitRes = await fetch("/api/lootbox/commit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ walletAddress }),
+        });
+
+        if (!commitRes.ok) {
+          const errData = await commitRes.json().catch(() => ({}));
+          throw new Error(errData.error || "Failed to build transaction");
+        }
+
+        commitData = await commitRes.json();
+        paymentTxns = (commitData!.unsignedTxns as string[]).map(
+          (b64: string) =>
+            algosdk.decodeUnsignedTransaction(
+              new Uint8Array(Buffer.from(b64, "base64"))
+            )
+        );
+      }
+
+      /* 5. Combine all transactions into one array for a single wallet prompt */
+      const allOptInTxns = ([] as algosdk.Transaction[]).concat(
+        ...optInGroups
+      );
+      const allTxns = [...allOptInTxns, ...paymentTxns];
+
+      if (allTxns.length > 0) {
+        const encodedForWallet = allTxns.map((txn) =>
+          algosdk.encodeUnsignedTransaction(txn)
+        );
+
+        setState("waiting");
+        const signedAll = await signTransactions(encodedForWallet);
+        const signedFiltered = signedAll.filter(
+          (s): s is Uint8Array => s !== null
+        );
+
+        /* 6. Submit each opt-in group sequentially, then payment */
+        let offset = 0;
+        for (let g = 0; g < optInGroups.length; g++) {
+          const group = optInGroups[g];
+          const groupSigned = signedFiltered.slice(
+            offset,
+            offset + group.length
+          );
+          const { txid } = await algodClient
+            .sendRawTransaction(groupSigned)
+            .do();
+          await algosdk.waitForConfirmation(
+            algodClient,
+            txid as string,
+            4
+          );
+          offset += group.length;
+        }
+
+        /* 7. Submit payment/commit transaction(s) */
+        if (paymentTxns.length > 0 && commitData) {
+          const paymentSigned = signedFiltered.slice(
+            offset,
+            offset + paymentTxns.length
+          );
+          const { txid } = await algodClient
+            .sendRawTransaction(paymentSigned)
+            .do();
+          await algosdk.waitForConfirmation(
+            algodClient,
+            txid as string,
+            10
+          );
+          paymentTxId = commitData.txIds[0] as string;
+          setPendingReveal({ walletAddress, paymentTxId });
         }
       }
 
-      const needsOptIn = uniqueAssetIds.filter((id) => !heldAssets.has(id));
-
-      /* 3. Get unsigned commit/payment transaction from API */
-      const commitRes = await fetch("/api/lootbox/commit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ walletAddress }),
-      });
-
-      if (!commitRes.ok) {
-        const errData = await commitRes.json().catch(() => ({}));
-        throw new Error(errData.error || "Failed to build transaction");
-      }
-
-      const commitData = await commitRes.json();
-      const { unsignedTxns, txIds } = commitData as {
-        unsignedTxns: string[];
-        txIds: string[];
-      };
-
-      /* 4. Build opt-in transactions if needed */
-      const suggestedParams = await algodClient.getTransactionParams().do();
-      const optInTxns: algosdk.Transaction[] = needsOptIn.map((assetId) =>
-        algosdk.makeAssetTransferTxnWithSuggestedParamsFromObject({
-          sender: walletAddress,
-          receiver: walletAddress,
-          assetIndex: assetId,
-          amount: 0,
-          suggestedParams,
-        })
-      );
-
-      if (optInTxns.length > 1) {
-        algosdk.assignGroupID(optInTxns);
-      }
-
-      /* 5. Decode commit/payment txns (these already have their own group ID) */
-      const paymentTxns = unsignedTxns.map((b64: string) =>
-        algosdk.decodeUnsignedTransaction(
-          new Uint8Array(Buffer.from(b64, "base64"))
-        )
-      );
-
-      /* 6. Sign all transactions in one wallet prompt */
-      const allTxns = [...optInTxns, ...paymentTxns];
-      const encodedForWallet = allTxns.map((txn) =>
-        algosdk.encodeUnsignedTransaction(txn)
-      );
-
-      setState("waiting");
-      const signedAll = await signTransactions(encodedForWallet);
-      const signedFiltered = signedAll.filter(
-        (s): s is Uint8Array => s !== null
-      );
-
-      /* 7. Submit opt-ins first (separately from payment) */
-      let offset = 0;
-      if (optInTxns.length > 0) {
-        const optInSigned = signedFiltered.slice(0, optInTxns.length);
-        const { txid } = await algodClient
-          .sendRawTransaction(optInSigned)
-          .do();
-        await algosdk.waitForConfirmation(algodClient, txid, 4);
-        offset = optInTxns.length;
-      }
-
-      /* 8. Submit payment/commit transaction(s) */
-      const paymentSigned = signedFiltered.slice(
-        offset,
-        offset + paymentTxns.length
-      );
-      const { txid: payTxid } = await algodClient
-        .sendRawTransaction(paymentSigned)
-        .do();
-      await algosdk.waitForConfirmation(algodClient, payTxid, 10);
-
-      const paymentTxId = (txIds[0] as string) ?? payTxid;
-
-      /* 9. Save pending reveal for recovery */
-      sessionStorage.setItem(
-        PENDING_KEY,
-        JSON.stringify({ walletAddress, paymentTxId })
-      );
-
-      /* 12. Reveal */
+      /* 8. Reveal */
       await handleReveal(walletAddress, paymentTxId);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Something went wrong";
-      // Don't overwrite a pending reveal error
-      if (state !== "revealing") {
-        setError(msg);
-        setState("error");
+
+      // Gracefully handle user cancellation / wallet rejection
+      if (
+        msg.toLowerCase().includes("user rejected") ||
+        msg.toLowerCase().includes("cancelled")
+      ) {
+        if (!pendingReveal) setPendingReveal(null);
+        setState("idle");
+        setShowModal(false);
+        return;
       }
+
+      setError(msg);
+      setState("error");
     }
-  }, [walletAddress, prizes, signTransactions, handleReveal, state]);
+  }, [walletAddress, prizes, signTransactions, handleReveal, pendingReveal]);
 
   /* ---------------------------------------------------------------- */
   /*  Retry handler                                                   */
   /* ---------------------------------------------------------------- */
 
   const handleRetry = useCallback(() => {
-    const raw = sessionStorage.getItem(PENDING_KEY);
-    if (raw && walletAddress) {
-      try {
-        const pending: PendingReveal = JSON.parse(raw);
-        if (pending.walletAddress === walletAddress) {
-          handleReveal(pending.walletAddress, pending.paymentTxId);
-          return;
-        }
-      } catch {
-        // fall through
-      }
+    // If there is a pending reveal, re-trigger the full flow (which will
+    // detect the pending reveal and skip straight to the reveal call)
+    if (pendingReveal && walletAddress) {
+      setError(null);
+      setResult(null);
+      handleOpenLootBox();
+      return;
     }
     setState("idle");
     setError(null);
     setResult(null);
     setShowModal(false);
-  }, [walletAddress, handleReveal]);
+  }, [walletAddress, pendingReveal, handleOpenLootBox]);
 
   /* ---------------------------------------------------------------- */
   /*  Close modal                                                     */
@@ -346,6 +410,7 @@ export default function LootboxStudio() {
     setState("idle");
     setResult(null);
     setError(null);
+    setPendingReveal(null);
   }, []);
 
   /* ---------------------------------------------------------------- */
@@ -366,6 +431,11 @@ export default function LootboxStudio() {
             {lootboxConfig.cratePrice} ALGO
           </span>
         </p>
+        {cratesOpened > 0 && (
+          <p className="mt-1 text-xs text-zinc-500">
+            Opened this session: {cratesOpened}
+          </p>
+        )}
       </div>
 
       <div className="grid gap-8 lg:grid-cols-5">
@@ -408,10 +478,22 @@ export default function LootboxStudio() {
             {/* Open button */}
             <button
               onClick={handleOpenLootBox}
-              disabled={isProcessing || !walletAddress}
+              disabled={
+                isProcessing ||
+                !walletAddress ||
+                (!prizesLoaded && !pendingReveal)
+              }
               className="rounded-xl bg-indigo-600 px-8 py-3 text-base font-semibold text-white transition-all hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isProcessing ? "Processing..." : "Open Loot Box"}
+              {!walletAddress
+                ? "Connect Wallet"
+                : isProcessing
+                ? "Processing..."
+                : pendingReveal
+                ? "Retry Loot Box"
+                : !prizesLoaded
+                ? "Loading..."
+                : "Open Loot Box"}
             </button>
 
             {/* Error inline */}
@@ -430,9 +512,26 @@ export default function LootboxStudio() {
         </div>
 
         {/* -------------------------------------------------------- */}
-        {/*  Sidebar — Prize list                                    */}
+        {/*  Sidebar — Balance + Prize list                          */}
         {/* -------------------------------------------------------- */}
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2 space-y-4">
+          {/* Community Fund Balance */}
+          {buyerBalance !== null && (
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 px-5 py-4">
+              <p className="text-xs uppercase tracking-wide text-zinc-500">
+                Community Fund
+              </p>
+              <p className="mt-1 text-lg font-bold tabular-nums text-indigo-400">
+                {buyerBalance.toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}{" "}
+                <span className="text-xs font-normal text-zinc-500">
+                  ALGO
+                </span>
+              </p>
+            </div>
+          )}
           <button
             onClick={() => setShowPrizes(!showPrizes)}
             className="flex w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900/70 px-5 py-3 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-800/60 lg:hidden"
@@ -633,12 +732,28 @@ export default function LootboxStudio() {
                 <p className="text-sm text-red-400">
                   {error || "Something went wrong"}
                 </p>
-                <button
-                  onClick={handleRetry}
-                  className="rounded-lg bg-zinc-800 px-5 py-2 text-sm text-zinc-300 hover:bg-zinc-700"
-                >
-                  Retry
-                </button>
+                {pendingReveal && (
+                  <div className="w-full rounded-lg border border-emerald-900/30 bg-emerald-950/20 px-4 py-2.5">
+                    <p className="text-xs text-emerald-400/80">
+                      Your payment went through. Tap Retry to claim your
+                      prize — you will not be charged again.
+                    </p>
+                  </div>
+                )}
+                <div className="grid w-full grid-cols-2 gap-3">
+                  <button
+                    onClick={closeModal}
+                    className="rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700 transition-colors"
+                  >
+                    Close
+                  </button>
+                  <button
+                    onClick={handleRetry}
+                    className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-500 transition-colors"
+                  >
+                    {pendingReveal ? "Retry" : "Try Again"}
+                  </button>
+                </div>
               </div>
             )}
           </div>

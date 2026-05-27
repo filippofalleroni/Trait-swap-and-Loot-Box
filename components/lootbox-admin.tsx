@@ -99,12 +99,12 @@ export default function LootboxAdmin() {
         sender: walletAddress,
         receiver: walletAddress,
         amount: 0,
-        note: new TextEncoder().encode(challenge),
+        note: new TextEncoder().encode(`lootbox-admin-auth:${challenge}`),
         suggestedParams: params,
       });
 
       // 3. Sign with the connected wallet (the tx is never submitted on-chain).
-      const encodedTxn = txn.toByte();
+      const encodedTxn = algosdk.encodeUnsignedTransaction(txn);
       const signedTxns = await signTransactions([encodedTxn]);
       const signed = signedTxns[0];
       if (!signed) throw new Error("Transaction was not signed");
@@ -169,8 +169,11 @@ export default function LootboxAdmin() {
       loadRevenue();
       loadNfts();
 
-      // Auto-refresh revenue every 30 seconds.
-      revenueIntervalRef.current = setInterval(loadRevenue, 30_000);
+      // Auto-refresh revenue and NFT inventory every 30 seconds.
+      revenueIntervalRef.current = setInterval(() => {
+        loadRevenue();
+        loadNfts();
+      }, 30_000);
     }
 
     return () => {
@@ -221,6 +224,8 @@ export default function LootboxAdmin() {
   }
 
   function removePrize(index: number) {
+    const prizeName = prizes[index]?.name || "this prize";
+    if (!confirm(`Remove "${prizeName}" from the prize table?`)) return;
     setPrizes(prizes.filter((_, i) => i !== index));
     if (editingIndex === index) cancelEdit();
   }
@@ -686,6 +691,7 @@ export default function LootboxAdmin() {
               <thead>
                 <tr className="border-b border-zinc-800 text-xs uppercase tracking-wide text-zinc-500">
                   <th className="px-3 py-2">Asset ID</th>
+                  <th className="px-3 py-2">Name</th>
                   <th className="px-3 py-2">Balance</th>
                 </tr>
               </thead>
@@ -697,6 +703,9 @@ export default function LootboxAdmin() {
                   >
                     <td className="px-3 py-2 font-mono text-zinc-300">
                       {nft.assetId}
+                    </td>
+                    <td className="px-3 py-2 text-zinc-300">
+                      {nft.name || "—"}
                     </td>
                     <td className="px-3 py-2 text-zinc-300">
                       {nft.amount.toLocaleString()}

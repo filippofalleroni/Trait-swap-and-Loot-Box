@@ -20,8 +20,9 @@ import type { PrizeTier } from "@/lib/types";
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const challenges = new Map<string, { nonce: string; expires: number }>();
 
-// In-memory session set (wallet addresses that have authenticated).
-const sessions = new Set<string>();
+// In-memory session map (wallet addresses that have authenticated) with TTL.
+const SESSION_TTL_MS = 60 * 60 * 1000; // 1 hour
+const sessions = new Map<string, number>(); // address -> expiresAt timestamp
 
 function pruneExpiredChallenges() {
   const now = Date.now();
@@ -48,7 +49,9 @@ function assertAdmin(walletAddress: string | null) {
 // Helper: assert the caller has an active session
 // ---------------------------------------------------------------------------
 function assertSession(walletAddress: string) {
-  if (!sessions.has(walletAddress)) {
+  const expiresAt = sessions.get(walletAddress);
+  if (!expiresAt || Date.now() >= expiresAt) {
+    sessions.delete(walletAddress);
     throw new Error("No active session. Please authenticate first.");
   }
 }
@@ -99,12 +102,16 @@ export async function adminCreateSession(
   const decoded = algosdk.decodeSignedTransaction(signedBytes);
   const txn = decoded.txn;
 
-  // Verify the note contains our nonce.
-  const noteStr = txn.note
-    ? Buffer.from(txn.note).toString("utf-8")
-    : "";
-  if (noteStr !== entry.nonce) {
-    throw new Error("Challenge nonce not found in transaction note.");
+  // Verify the cryptographic signature to prove wallet ownership.
+  // Without this check, anyone who knows an admin address and intercepts
+  // the nonce could forge the signed-transaction envelope.
+  if (!decoded.sig) {
+    throw new Error("Transaction is missing a signature.");
+  }
+
+  // Must be a payment transaction — reject asset transfers, app calls, etc.
+  if (txn.type !== algosdk.TransactionType.pay) {
+    throw new Error("Challenge transaction must be a payment transaction.");
   }
 
   // Verify sender matches the claimed admin wallet.
@@ -113,9 +120,63 @@ export async function adminCreateSession(
     throw new Error("Transaction sender does not match wallet address.");
   }
 
-  // Clean up and create session.
+  // Reject transactions with rekeyTo — could be used to hijack the wallet.
+  if (txn.rekeyTo) {
+    throw new Error("Challenge transaction must not contain rekeyTo.");
+  }
+
+  // Validate payment fields: must be a zero-amount self-payment.
+  const payFields = txn.payment;
+  if (payFields?.closeRemainderTo) {
+    throw new Error("Challenge transaction must not contain closeRemainderTo.");
+  }
+  if (payFields?.receiver) {
+    const receiverAddr = payFields.receiver.toString();
+    if (receiverAddr !== senderAddr) {
+      throw new Error("Challenge transaction must be a self-payment.");
+    }
+  }
+  if (payFields?.amount !== undefined && payFields.amount !== BigInt(0)) {
+    throw new Error("Challenge transaction must have zero amount.");
+  }
+
+  // Algorand transaction signatures sign the canonical "TX"-prefixed bytes.
+  // We verify using Node.js Ed25519 (available in Node 16+).
+  const rawTxnBytes = algosdk.encodeUnsignedTransaction(txn);
+  const TX_PREFIX = Buffer.from("TX");
+  const taggedMsg = Buffer.concat([TX_PREFIX, rawTxnBytes]);
+
+  const senderPublicKey = algosdk.decodeAddress(walletAddress).publicKey;
+  const ed25519PubKey = crypto.createPublicKey({
+    key: Buffer.concat([
+      // Ed25519 DER prefix for a 32-byte public key
+      Buffer.from("302a300506032b6570032100", "hex"),
+      Buffer.from(senderPublicKey),
+    ]),
+    format: "der",
+    type: "spki",
+  });
+  const isValid = crypto.verify(
+    null, // Ed25519 does not use a separate hash algorithm
+    taggedMsg,
+    ed25519PubKey,
+    Buffer.from(decoded.sig)
+  );
+  if (!isValid) {
+    throw new Error("Transaction signature verification failed.");
+  }
+
+  // Verify the note contains our challenge nonce with the expected prefix.
+  const noteStr = txn.note
+    ? Buffer.from(txn.note).toString("utf-8")
+    : "";
+  if (noteStr !== `lootbox-admin-auth:${entry.nonce}`) {
+    throw new Error("Challenge nonce not found in transaction note.");
+  }
+
+  // Clean up and create session with TTL.
   challenges.delete(walletAddress);
-  sessions.add(walletAddress);
+  sessions.set(walletAddress, Date.now() + SESSION_TTL_MS);
 
   return { ok: true };
 }
@@ -174,6 +235,39 @@ export async function adminSavePrizes(
 ): Promise<{ count: number }> {
   assertAdmin(walletAddress);
   assertSession(walletAddress);
+
+  // Validate prize data to prevent injection of malicious values.
+  if (!Array.isArray(prizes)) {
+    throw new Error("Prizes must be an array.");
+  }
+  if (prizes.length > 200) {
+    throw new Error("Too many prizes (max 200).");
+  }
+  const validRarities = new Set(["common", "uncommon", "rare", "epic", "legendary"]);
+  const validTypes = new Set(["token", "nft"]);
+  for (const p of prizes) {
+    if (!p.id || typeof p.id !== "string" || p.id.length > 200) {
+      throw new Error("Invalid prize ID.");
+    }
+    if (!p.name || typeof p.name !== "string" || p.name.length > 200) {
+      throw new Error("Invalid prize name.");
+    }
+    if (!validTypes.has(p.type)) {
+      throw new Error(`Invalid prize type: ${p.type}`);
+    }
+    if (!validRarities.has(p.rarity)) {
+      throw new Error(`Invalid prize rarity: ${p.rarity}`);
+    }
+    if (typeof p.assetId !== "number" || p.assetId < 0 || !Number.isFinite(p.assetId)) {
+      throw new Error("Invalid prize assetId.");
+    }
+    if (typeof p.amount !== "number" || p.amount < 0 || !Number.isFinite(p.amount)) {
+      throw new Error("Invalid prize amount.");
+    }
+    if (typeof p.weight !== "number" || p.weight <= 0 || !Number.isFinite(p.weight)) {
+      throw new Error("Prize weight must be a positive number.");
+    }
+  }
 
   const payload = JSON.stringify(prizes, null, 2);
 
@@ -259,16 +353,17 @@ export async function adminGetBuyerNfts(
       .accountInformation(masterAccount.addr)
       .do();
 
-    const assets = (accountInfo.assets ?? []) as unknown as Array<{
-      "asset-id": number;
-      amount: number;
-    }>;
+    // algosdk v3 algod response uses camelCase (assetId, amount as bigint).
+    // Indexer responses use kebab-case (asset-id). Handle both for safety.
+    const assets = (accountInfo.assets ?? []) as unknown as Array<
+      Record<string, unknown>
+    >;
 
     const nfts = assets
-      .filter((a) => Number(a.amount) > 0)
+      .filter((a) => Number(a.amount ?? 0) > 0)
       .map((a) => ({
-        assetId: Number(a["asset-id"]),
-        amount: Number(a.amount),
+        assetId: Number(a["asset-id"] ?? a["assetId"] ?? a["asset_id"] ?? 0),
+        amount: Number(a.amount ?? 0),
       }));
 
     return { nfts };
@@ -289,6 +384,15 @@ export async function adminOptIn(
 ): Promise<{ message: string }> {
   assertAdmin(walletAddress);
   assertSession(walletAddress);
+
+  if (
+    typeof assetId !== "number" ||
+    !Number.isInteger(assetId) ||
+    assetId <= 0 ||
+    assetId > Number.MAX_SAFE_INTEGER
+  ) {
+    throw new Error("Invalid asset ID.");
+  }
 
   const algod = getAlgodClient();
   const masterAccount = getLootboxMasterAccount();

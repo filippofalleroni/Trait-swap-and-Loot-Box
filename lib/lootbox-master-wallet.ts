@@ -7,8 +7,9 @@ import algosdk from "algosdk";
  * The master wallet holds the prize pool assets (tokens and NFTs)
  * and is used to distribute prizes to winners.
  */
-export function getLootboxMasterAccount(): algosdk.Account {
-  const mnemonic = process.env.LOOTBOX_MASTER_MNEMONIC?.trim();
+
+function getLootboxMasterMnemonic(): string {
+  const mnemonic = process.env.LOOTBOX_MASTER_MNEMONIC?.trim() ?? "";
 
   if (!mnemonic) {
     throw new Error(
@@ -17,5 +18,14 @@ export function getLootboxMasterAccount(): algosdk.Account {
     );
   }
 
-  return algosdk.mnemonicToSecretKey(mnemonic);
+  return mnemonic;
+}
+
+export function getLootboxMasterAccount(): algosdk.Account {
+  return algosdk.mnemonicToSecretKey(getLootboxMasterMnemonic());
+}
+
+/** Return the master wallet's public Algorand address. */
+export function getLootboxMasterAddress(): string {
+  return getLootboxMasterAccount().addr.toString();
 }

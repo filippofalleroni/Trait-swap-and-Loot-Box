@@ -1,38 +1,107 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAlgodClient, INDEXER_BASE_URL } from "@/lib/algorand";
+import algosdk from "algosdk";
+import { INDEXER_BASE_URL, resolveArc19Url } from "@/lib/algorand";
 import { getTreasuryAddress } from "@/lib/treasury";
 import { getManagerAccount } from "@/lib/manager-signer";
 import { uploadJsonToIpfs } from "@/lib/pinata";
 import { computeArc19ReserveAddress, updateArc19Metadata } from "@/lib/arc19-update";
-import { COLLECTION_CREATOR_ADDRESS } from "@/config/collection";
 import { mockTraits } from "@/config/mock-data";
 import { feeConfig } from "@/config/fees";
 import type { NftMetadata, OfficialTraitCategory } from "@/lib/types";
 import { isOfficialTraitCategory } from "@/lib/nft-layering";
 
 /**
- * POST /api/trait-lab/mint
- *
- * Applies a trait change to an NFT after verifying payment.
- *
- * Request body:
- *   {
- *     nftAssetId: number,
- *     newTraitId: string,
- *     walletAddress: string,
- *     paymentTxId: string
- *   }
- *
- * Response:
- *   { status: "prepared" | "submitted", note: string }
- *
- * Modes:
- *   - Preview mode (default): Validates everything, returns "prepared"
- *     without making on-chain changes. Good for development.
- *   - Live mode (ARC19_LIVE_UPDATES_ENABLED=true): Uploads new metadata
- *     to IPFS and updates the ARC-19 reserve address on-chain.
+ * Allow this route up to 60 seconds for indexer retries + IPFS uploads + on-chain tx.
+ * On Vercel, this requires a Pro plan for serverless functions > 10 s.
  */
+export const maxDuration = 60;
+
+const ALGO_TXID_REGEX = /^[A-Z2-7]{52}$/;
+
+/* ------------------------------------------------------------------ */
+/*  SSRF hostname blocklist                                            */
+/* ------------------------------------------------------------------ */
+function isBlockedHostname(hostname: string): boolean {
+  // Exact matches
+  if (
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "0.0.0.0" ||
+    hostname === "[::1]" ||
+    hostname === "[::ffff:127.0.0.1]" ||
+    hostname === "[0:0:0:0:0:0:0:1]"
+  ) {
+    return true;
+  }
+  // Suffix matches for local/internal TLDs
+  if (
+    hostname.endsWith(".local") ||
+    hostname.endsWith(".internal") ||
+    hostname.endsWith(".localhost")
+  ) {
+    return true;
+  }
+  // Private IPv4 ranges (including link-local)
+  if (
+    hostname.startsWith("10.") ||
+    hostname.startsWith("192.168.") ||
+    hostname.startsWith("169.254.") ||
+    hostname.startsWith("0.") ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
+    /^127\./.test(hostname)
+  ) {
+    return true;
+  }
+  // Cloud metadata endpoints
+  if (hostname === "metadata.google.internal" || hostname === "169.254.169.254") {
+    return true;
+  }
+  return false;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Rate limiting                                                      */
+/* ------------------------------------------------------------------ */
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX = 5;
+
+function pruneRateLimitMap() {
+  const now = Date.now();
+  rateLimitMap.forEach((entry, key) => {
+    if (now >= entry.resetAt) rateLimitMap.delete(key);
+  });
+}
+
+function isRateLimited(key: string): boolean {
+  const now = Date.now();
+  if (rateLimitMap.size > 1000) pruneRateLimitMap();
+  const entry = rateLimitMap.get(key);
+  if (!entry || now >= entry.resetAt) {
+    rateLimitMap.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return false;
+  }
+  entry.count++;
+  return entry.count > RATE_LIMIT_MAX;
+}
+
+const usedMintTxIds = new Set<string>();
+const usedMintTxTimestamps = new Map<string, number>();
+const MAX_USED_TX_AGE_MS = 1000 * 60 * 60;
+
+function pruneUsedMintTxIds() {
+  const now = Date.now();
+  usedMintTxTimestamps.forEach((ts, txId) => {
+    if (now - ts > MAX_USED_TX_AGE_MS) {
+      usedMintTxIds.delete(txId);
+      usedMintTxTimestamps.delete(txId);
+    }
+  });
+}
+
 export async function POST(request: NextRequest) {
+  let claimedTxId: string | null = null;
+
   try {
     const body = await request.json();
     const { nftAssetId, newTraitId, walletAddress, paymentTxId } = body as {
@@ -42,13 +111,63 @@ export async function POST(request: NextRequest) {
       paymentTxId?: string;
     };
 
-    // --- Validate required fields ---
     if (!nftAssetId || !newTraitId || !walletAddress || !paymentTxId) {
       return NextResponse.json(
-        {
-          error:
-            "Missing required fields: nftAssetId, newTraitId, walletAddress, paymentTxId",
-        },
+        { error: "Missing required fields: nftAssetId, newTraitId, walletAddress, paymentTxId" },
+        { status: 400 }
+      );
+    }
+
+    if (!algosdk.isValidAddress(walletAddress)) {
+      return NextResponse.json(
+        { error: "Invalid wallet address." },
+        { status: 400 }
+      );
+    }
+
+    if (isRateLimited(walletAddress)) {
+      return NextResponse.json(
+        { error: "Too many attempts. Please wait a minute." },
+        { status: 429 }
+      );
+    }
+
+    if (
+      typeof nftAssetId !== "number" ||
+      !Number.isInteger(nftAssetId) ||
+      nftAssetId <= 0 ||
+      nftAssetId > Number.MAX_SAFE_INTEGER
+    ) {
+      return NextResponse.json(
+        { error: "Invalid asset ID." },
+        { status: 400 }
+      );
+    }
+
+    if (!ALGO_TXID_REGEX.test(paymentTxId)) {
+      return NextResponse.json(
+        { error: "Invalid transaction ID format." },
+        { status: 400 }
+      );
+    }
+
+    pruneUsedMintTxIds();
+    if (usedMintTxIds.has(paymentTxId)) {
+      return NextResponse.json(
+        { error: "This transaction has already been used." },
+        { status: 409 }
+      );
+    }
+    usedMintTxIds.add(paymentTxId);
+    usedMintTxTimestamps.set(paymentTxId, Date.now());
+    claimedTxId = paymentTxId;
+
+    // Validate traitId format: alphanumeric, hyphens, underscores only (max 100 chars)
+    if (!/^[a-zA-Z0-9_-]{1,100}$/.test(newTraitId)) {
+      usedMintTxIds.delete(paymentTxId);
+      usedMintTxTimestamps.delete(paymentTxId);
+      return NextResponse.json(
+        { error: "Invalid trait ID format." },
         { status: 400 }
       );
     }
@@ -58,19 +177,19 @@ export async function POST(request: NextRequest) {
       ? newTraitId.replace("remove-", "").toUpperCase()
       : null;
 
-    // --- Look up the trait (if not a removal) ---
     let trait = null;
     if (!isRemoval) {
       trait = mockTraits.find((t) => t.id === newTraitId);
       if (!trait) {
+        usedMintTxIds.delete(paymentTxId);
+        usedMintTxTimestamps.delete(paymentTxId);
         return NextResponse.json(
-          { error: `Trait '${newTraitId}' not found` },
+          { error: "Trait not found." },
           { status: 404 }
         );
       }
     }
 
-    // --- Verify the payment on-chain ---
     const paymentValid = await verifyPayment({
       txId: paymentTxId,
       expectedSender: walletAddress,
@@ -81,26 +200,28 @@ export async function POST(request: NextRequest) {
     });
 
     if (!paymentValid.ok) {
+      usedMintTxIds.delete(paymentTxId);
+      usedMintTxTimestamps.delete(paymentTxId);
       return NextResponse.json(
         { error: `Payment verification failed: ${paymentValid.reason}` },
         { status: 400 }
       );
     }
 
-    // --- Verify the wallet owns the NFT ---
     const ownershipValid = await verifyOwnership({
       assetId: nftAssetId,
       walletAddress,
     });
 
     if (!ownershipValid) {
+      usedMintTxIds.delete(paymentTxId);
+      usedMintTxTimestamps.delete(paymentTxId);
       return NextResponse.json(
         { error: "Wallet does not own this NFT" },
         { status: 403 }
       );
     }
 
-    // --- Determine the category being changed ---
     const category: OfficialTraitCategory | null = isRemoval
       ? (removalCategory && isOfficialTraitCategory(removalCategory)
           ? removalCategory
@@ -110,17 +231,17 @@ export async function POST(request: NextRequest) {
         : null;
 
     if (!category) {
+      usedMintTxIds.delete(paymentTxId);
+      usedMintTxTimestamps.delete(paymentTxId);
       return NextResponse.json(
         { error: "Invalid trait category" },
         { status: 400 }
       );
     }
 
-    // --- Check if live updates are enabled ---
     const isLive = process.env.ARC19_LIVE_UPDATES_ENABLED === "true";
 
     if (!isLive) {
-      // Preview mode: just return success without on-chain changes
       return NextResponse.json({
         status: "prepared" as const,
         note: isRemoval
@@ -129,14 +250,21 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // --- Live mode: build new metadata and update on-chain ---
-
-    // Fetch current metadata for the NFT
     const currentMetadata = await fetchCurrentMetadata(nftAssetId);
 
-    // Build updated metadata
+    if (!currentMetadata) {
+      // Transient infrastructure failure (indexer/IPFS down).
+      // Release the txId so the user can retry with the same valid payment.
+      usedMintTxIds.delete(paymentTxId);
+      usedMintTxTimestamps.delete(paymentTxId);
+      return NextResponse.json(
+        { error: "Could not load NFT metadata. Please try again." },
+        { status: 503 }
+      );
+    }
+
     const updatedProperties = {
-      ...(currentMetadata?.properties ?? {}),
+      ...(currentMetadata.properties ?? {}),
     };
 
     if (isRemoval) {
@@ -146,22 +274,18 @@ export async function POST(request: NextRequest) {
     }
 
     const newMetadata: NftMetadata = {
-      name: currentMetadata?.name ?? `NFT #${nftAssetId}`,
+      name: currentMetadata.name ?? `NFT #${nftAssetId}`,
       description:
-        currentMetadata?.description ?? "An NFT from this collection.",
-      image: currentMetadata?.image ?? "",
+        currentMetadata.description ?? "An NFT from this collection.",
+      image: currentMetadata.image ?? "",
       image_mimetype: "image/png",
       properties: updatedProperties,
-      external_url: currentMetadata?.external_url,
+      external_url: currentMetadata.external_url,
     };
 
-    // Upload new metadata to IPFS via Pinata
     const newCid = await uploadJsonToIpfs(newMetadata as unknown as Record<string, unknown>);
-
-    // Compute the new ARC-19 reserve address from the CID
     const newReserveAddress = computeArc19ReserveAddress(newCid);
 
-    // Update the on-chain reserve address
     const managerAccount = getManagerAccount();
     const updateTxId = await updateArc19Metadata({
       assetId: nftAssetId,
@@ -176,6 +300,11 @@ export async function POST(request: NextRequest) {
         : `Trait "${trait!.name}" applied to NFT ${nftAssetId}. Update txId: ${updateTxId ?? "N/A"}`,
     });
   } catch (err) {
+    // Release the in-memory claim so the user can retry with the same payment tx.
+    if (claimedTxId) {
+      usedMintTxIds.delete(claimedTxId);
+      usedMintTxTimestamps.delete(claimedTxId);
+    }
     console.error("[trait-lab/mint] Error:", err);
     return NextResponse.json(
       { error: "Mint process failed. Please try again." },
@@ -184,13 +313,13 @@ export async function POST(request: NextRequest) {
   }
 }
 
-/* ------------------------------------------------------------------ */
-/*  Verification Helpers                                              */
-/* ------------------------------------------------------------------ */
-
 /**
- * Verify a payment transaction exists on-chain with the expected
- * sender, recipient, and amount.
+ * Verify a payment transaction on the indexer.
+ *
+ * Retries for up to ~60 s to allow the indexer time to index the confirmed tx.
+ * This is critical because the client submits the payment to algod and
+ * immediately calls this mint endpoint, but the indexer typically lags
+ * 3-15 seconds behind algod.
  */
 async function verifyPayment({
   txId,
@@ -203,60 +332,87 @@ async function verifyPayment({
   expectedRecipient: string;
   expectedAmountAlgo: number;
 }): Promise<{ ok: boolean; reason?: string }> {
-  try {
-    const algodClient = getAlgodClient();
+  const MAX_ATTEMPTS = 20;
+  const RETRY_DELAY_MS = 3000;
 
-    // Wait for the transaction to be confirmed (up to 10 rounds)
-    const result = await algodClient.pendingTransactionInformation(txId).do() as unknown as Record<string, unknown>;
-
-    // Check if the transaction is confirmed
-    if (!result || !(result["confirmed-round"] ?? result["confirmedRound"])) {
-      // Try the indexer as a fallback (transaction might already be indexed)
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    try {
       const indexerUrl = `${INDEXER_BASE_URL}/v2/transactions/${txId}`;
       const indexerRes = await fetch(indexerUrl);
 
       if (!indexerRes.ok) {
-        return { ok: false, reason: "Transaction not found or not yet confirmed" };
+        throw new Error("not indexed yet");
       }
 
       const indexerData = await indexerRes.json();
       const txn = indexerData.transaction;
 
-      if (!txn) {
-        return { ok: false, reason: "Transaction data missing" };
+      if (!txn || !txn["confirmed-round"]) {
+        throw new Error("not confirmed yet");
       }
 
-      // Verify sender
+      if (txn["tx-type"] !== "pay") {
+        return { ok: false, reason: "Transaction is not a payment transaction" };
+      }
+
+      // Reject transactions with rekey or close-remainder-to fields
+      if (txn["rekey-to"]) {
+        return { ok: false, reason: "Transaction contains a rekey field and is rejected" };
+      }
+
       if (txn.sender !== expectedSender) {
         return { ok: false, reason: "Sender mismatch" };
       }
 
-      // Verify recipient
       const paymentDetails = txn["payment-transaction"];
       if (!paymentDetails || paymentDetails.receiver !== expectedRecipient) {
         return { ok: false, reason: "Recipient mismatch" };
       }
 
-      // Verify amount (with small tolerance for rounding)
+      if (paymentDetails["close-remainder-to"]) {
+        return { ok: false, reason: "Transaction contains a close-remainder-to field and is rejected" };
+      }
+
       const expectedMicroAlgo = expectedAmountAlgo * 1_000_000;
       if (paymentDetails.amount < expectedMicroAlgo) {
         return { ok: false, reason: "Insufficient payment amount" };
       }
 
+      // Reject transactions older than 5 minutes to limit replay window
+      const roundTime = txn["round-time"];
+      if (roundTime != null && roundTime > 0) {
+        const txAge = Math.floor(Date.now() / 1000) - roundTime;
+        if (txAge > 300) {
+          return { ok: false, reason: "Transaction is too old. Please submit a new payment" };
+        }
+      }
+
       return { ok: true };
+    } catch (err) {
+      // Only retry on transient errors (not indexed/confirmed yet, network failures).
+      // Deterministic validation failures (wrong sender, wrong type, etc.) are
+      // returned immediately above as { ok: false }.
+      if (
+        err instanceof Error &&
+        !err.message.includes("not indexed yet") &&
+        !err.message.includes("not confirmed yet") &&
+        !err.message.includes("Failed") &&
+        !err.message.includes("fetch")
+      ) {
+        console.error("[verifyPayment] Unexpected error:", err);
+        return { ok: false, reason: "Payment verification error" };
+      }
     }
 
-    // Transaction found in pending info - it's confirmed
-    return { ok: true };
-  } catch (err) {
-    console.error("[verifyPayment] Error:", err);
-    return { ok: false, reason: "Payment verification error" };
+    // Wait before retrying
+    await new Promise(function (resolve) {
+      setTimeout(resolve, RETRY_DELAY_MS);
+    });
   }
+
+  return { ok: false, reason: "Transaction could not be confirmed on the indexer. Please try again." };
 }
 
-/**
- * Verify that the given wallet address currently holds the specified NFT.
- */
 async function verifyOwnership({
   assetId,
   walletAddress,
@@ -282,10 +438,6 @@ async function verifyOwnership({
   }
 }
 
-/**
- * Fetch the current ARC-19/ARC-69 metadata for an NFT.
- * Returns null if metadata cannot be resolved.
- */
 async function fetchCurrentMetadata(
   assetId: number
 ): Promise<NftMetadata | null> {
@@ -297,15 +449,30 @@ async function fetchCurrentMetadata(
 
     const data = await res.json();
     const url: string = data.asset?.params?.url ?? "";
+    const reserve: string | undefined = data.asset?.params?.reserve;
 
-    // Resolve IPFS URL
     let metadataUrl: string | null = null;
 
-    if (url.startsWith("ipfs://")) {
-      metadataUrl = `https://ipfs.io/ipfs/${url.replace("ipfs://", "")}`;
-    } else if (url.startsWith("https://") || url.startsWith("http://")) {
-      metadataUrl = url;
+    if (url.startsWith("template-ipfs://") || url.startsWith("ipfs://")) {
+      // Use resolveArc19Url to handle both ARC-19 template URLs and
+      // plain ipfs:// URLs. The reserve address is needed to derive
+      // the IPFS CID for ARC-19 template URLs.
+      metadataUrl = resolveArc19Url(url, reserve);
+    } else if (url.startsWith("https://")) {
+      // Block requests to private/internal hostnames to prevent SSRF
+      try {
+        const parsed = new URL(url);
+        const hostname = parsed.hostname.toLowerCase();
+        if (isBlockedHostname(hostname)) {
+          metadataUrl = null;
+        } else {
+          metadataUrl = url;
+        }
+      } catch {
+        metadataUrl = null;
+      }
     }
+    // Block plain http:// to prevent SSRF to internal services
 
     if (!metadataUrl) return null;
 

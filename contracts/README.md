@@ -4,11 +4,15 @@ This directory contains the TEALScript source for the commit-reveal randomness c
 
 ## Overview
 
-The contract implements a PCG32 pseudo-random number generator seeded by Algorand's VRF beacon. This gives verifiable, on-chain randomness for prize selection.
+The contract implements a commit-reveal pattern using the [Algorand Randomness Beacon](https://developer.algorand.org/docs/get-details/randomness-beacon/). The user commits (recording the current round), waits at least 8 rounds, then reveals to read the VRF seed from the block after their commit. The VRF seed is already cryptographically random, so we extract a `uint64` directly.
 
-## Attribution
+### VRF Round Expiry
 
-The PCG32 pseudo-random number generator used in this contract is based on [lib-pcg-avm](https://github.com/CiottiGiorgio/lib-pcg-avm) by Giorgio Ciotti, an open-source PCG implementation for the Algorand Virtual Machine. The commit-reveal pattern uses the [Algorand Randomness Beacon](https://developer.algorand.org/docs/get-details/randomness-beacon/) for VRF-derived seed entropy.
+Algorand only retains block headers for approximately 1000 rounds. If a user commits but doesn't reveal within that window, the VRF seed becomes inaccessible. The contract enforces a 900-round expiry (conservative buffer) and provides a `reclaim()` method so users can clean up expired commits and recommit.
+
+### Multiple Random Values
+
+If you need multiple random values from a single seed (e.g. rolling several dice in one transaction), use [lib-pcg-avm](https://github.com/CiottiGiorgio/lib-pcg-avm) by Giorgio Ciotti — an open-source PCG implementation for the Algorand Virtual Machine that handles overflow-safe multiplication and proper PRNG state management.
 
 ## Deploying Your Own
 
@@ -51,12 +55,13 @@ algokit localnet start
 
 Then deploy to LocalNet and run the loot box flow end-to-end.
 
-## Contract State
+## Contract Methods
 
-| Key | Type | Description |
-|-----|------|-------------|
-| `state` | uint64 | PCG32 internal state |
-| `randomness` | bytes | Latest random output |
+| Method | Description |
+|--------|-------------|
+| `commit()` | Records the current round for the caller. Can be called again to reset. |
+| `reveal()` | Reads the VRF seed from `blocks[committed+1]`, returns a random `uint64`, deletes the commit. Fails if called before 8 rounds or after 900 rounds. |
+| `reclaim()` | Deletes an expired commit (900+ rounds old) so the user can recommit. |
 
 ## Build Exclusion
 

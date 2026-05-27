@@ -4,6 +4,7 @@ import {
   NetworkId,
   WalletId,
   WalletManager,
+  type BaseWallet,
 } from "@txnlab/use-wallet";
 import {
   createContext,
@@ -21,6 +22,7 @@ type WalletContextValue = {
   isReady: boolean;
   isConnecting: boolean;
   walletAddress: string | null;
+  walletDisplayName: string | null;
   activeWalletName: string | null;
   connectWallet: (walletId: SupportedWalletId) => Promise<void>;
   disconnectWallet: () => Promise<void>;
@@ -38,6 +40,10 @@ const WALLET_ID_MAP: Record<SupportedWalletId, WalletId> = {
   lute: WalletId.LUTE,
 };
 
+function getWalletLabel(wallet: BaseWallet | null) {
+  return wallet?.name ?? null;
+}
+
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [manager] = useState(
     () =>
@@ -48,6 +54,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   );
   const [version, setVersion] = useState(0);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [walletDisplayName, setWalletDisplayName] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
     const unsubscribe = manager.subscribe(() => {
@@ -61,13 +70,57 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return unsubscribe;
   }, [manager]);
 
+  // Resolve NFD display name whenever the active address changes
+  useEffect(() => {
+    const activeAddress = manager.activeAddress;
+
+    if (!activeAddress) {
+      setWalletDisplayName(null);
+      return;
+    }
+
+    let isCancelled = false;
+
+    async function loadWalletDisplayName() {
+      try {
+        const response = await fetch(
+          `/api/nfd?address=${encodeURIComponent(activeAddress!)}`,
+          { cache: "no-store" }
+        );
+
+        if (!response.ok) {
+          throw new Error(`NFD API failed with status ${response.status}`);
+        }
+
+        const data = (await response.json()) as { nfd?: string | null };
+        if (!isCancelled) {
+          setWalletDisplayName(data.nfd ?? null);
+        }
+      } catch (error) {
+        console.error("Failed to resolve wallet NFD", error);
+        if (!isCancelled) {
+          setWalletDisplayName(null);
+        }
+      }
+    }
+
+    void loadWalletDisplayName();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [manager.activeAddress]);
+
   const value = useMemo<WalletContextValue>(() => {
+    const activeWallet = manager.activeWallet;
+
     return {
       isConnected: Boolean(manager.activeAddress),
       isReady: manager.isReady,
       isConnecting,
       walletAddress: manager.activeAddress,
-      activeWalletName: manager.activeWallet?.metadata?.name ?? null,
+      walletDisplayName,
+      activeWalletName: getWalletLabel(activeWallet),
       connectWallet: async (walletId: SupportedWalletId) => {
         const targetId = WALLET_ID_MAP[walletId];
         const wallet = manager.getWallet(targetId);
@@ -91,8 +144,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         return await wallet.signTransactions(txns, indexesToSign);
       },
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [manager, version, isConnecting]);
+  }, [isConnecting, manager, walletDisplayName, version]);
 
   return (
     <WalletContext.Provider value={value}>{children}</WalletContext.Provider>

@@ -1,8 +1,72 @@
 import { NextRequest, NextResponse } from "next/server";
-import { INDEXER_BASE_URL } from "@/lib/algorand";
+import algosdk from "algosdk";
+import { INDEXER_BASE_URL, resolveArc19Url } from "@/lib/algorand";
 import { COLLECTION_CREATOR_ADDRESS, COLLECTION_UNIT_PREFIX } from "@/config/collection";
 import type { CollectionNft, OfficialTraitCategory } from "@/lib/types";
 import { isOfficialTraitCategory, getTraitLayerImageUrl } from "@/lib/nft-layering";
+
+/* ------------------------------------------------------------------ */
+/*  SSRF hostname blocklist                                            */
+/* ------------------------------------------------------------------ */
+function isBlockedHostname(hostname: string): boolean {
+  if (
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "0.0.0.0" ||
+    hostname === "[::1]" ||
+    hostname === "[::ffff:127.0.0.1]" ||
+    hostname === "[0:0:0:0:0:0:0:1]"
+  ) {
+    return true;
+  }
+  if (
+    hostname.endsWith(".local") ||
+    hostname.endsWith(".internal") ||
+    hostname.endsWith(".localhost")
+  ) {
+    return true;
+  }
+  if (
+    hostname.startsWith("10.") ||
+    hostname.startsWith("192.168.") ||
+    hostname.startsWith("169.254.") ||
+    hostname.startsWith("0.") ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
+    /^127\./.test(hostname)
+  ) {
+    return true;
+  }
+  if (hostname === "metadata.google.internal" || hostname === "169.254.169.254") {
+    return true;
+  }
+  return false;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Rate limiting                                                      */
+/* ------------------------------------------------------------------ */
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX = 10;
+
+function pruneRateLimitMap() {
+  const now = Date.now();
+  rateLimitMap.forEach((entry, key) => {
+    if (now >= entry.resetAt) rateLimitMap.delete(key);
+  });
+}
+
+function isRateLimited(key: string): boolean {
+  const now = Date.now();
+  if (rateLimitMap.size > 1000) pruneRateLimitMap();
+  const entry = rateLimitMap.get(key);
+  if (!entry || now >= entry.resetAt) {
+    rateLimitMap.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return false;
+  }
+  entry.count++;
+  return entry.count > RATE_LIMIT_MAX;
+}
 
 /**
  * GET /api/owned-nfts?wallet=ADDRESS
@@ -28,6 +92,20 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       { error: "Missing 'wallet' query parameter" },
       { status: 400 }
+    );
+  }
+
+  if (!algosdk.isValidAddress(wallet)) {
+    return NextResponse.json(
+      { error: "Invalid wallet address format." },
+      { status: 400 }
+    );
+  }
+
+  if (isRateLimited(wallet)) {
+    return NextResponse.json(
+      { error: "Too many requests. Please wait a minute." },
+      { status: 429 }
     );
   }
 
@@ -59,6 +137,12 @@ export async function GET(request: NextRequest) {
 
     if (nonZeroAssets.length === 0) {
       return NextResponse.json({ nfts: [] });
+    }
+
+    // Cap the number of assets to process to prevent resource exhaustion
+    const MAX_ASSETS_TO_PROCESS = 200;
+    if (nonZeroAssets.length > MAX_ASSETS_TO_PROCESS) {
+      nonZeroAssets.length = MAX_ASSETS_TO_PROCESS;
     }
 
     // Step 2: For each asset, check creator and fetch metadata
@@ -97,9 +181,17 @@ export async function GET(request: NextRequest) {
           // Step 3: Extract metadata (ARC-19 or ARC-69)
           const nftName: string = assetInfo.params?.name ?? `NFT #${asset["asset-id"]}`;
           const url: string = assetInfo.params?.url ?? "";
+          const reserve: string | undefined = assetInfo.params?.reserve;
 
-          // Try to resolve the metadata URL
-          const metadataUrl = resolveIpfsUrl(url);
+          // Try to resolve the metadata URL.
+          // resolveArc19Url handles ARC-19 template URLs (using the reserve
+          // address to derive the IPFS CID) as well as plain ipfs:// URLs.
+          // For http(s) URLs we fall back to resolveIpfsUrl which applies
+          // SSRF protection (blocking internal/private hostnames).
+          const metadataUrl =
+            (url.startsWith("template-ipfs://") || url.startsWith("ipfs://"))
+              ? resolveArc19Url(url, reserve)
+              : resolveIpfsUrl(url);
           let metadata: Record<string, unknown> | null = null;
 
           if (metadataUrl) {
@@ -121,9 +213,16 @@ export async function GET(request: NextRequest) {
           // Resolve the main image URL
           let imageUrl = "";
           if (metadata && typeof metadata.image === "string") {
-            imageUrl = resolveIpfsUrl(metadata.image) ?? "";
+            const img = metadata.image;
+            imageUrl =
+              (img.startsWith("ipfs://") ? resolveArc19Url(img, undefined) : null)
+              ?? resolveIpfsUrl(img)
+              ?? "";
           } else if (url) {
-            imageUrl = resolveIpfsUrl(url) ?? "";
+            imageUrl =
+              (url.startsWith("template-ipfs://") || url.startsWith("ipfs://"))
+                ? (resolveArc19Url(url, reserve) ?? "")
+                : (resolveIpfsUrl(url) ?? "");
           }
 
           const nft: CollectionNft = {
@@ -186,10 +285,21 @@ function resolveIpfsUrl(url: string): string | null {
     return `https://ipfs.io/ipfs/${cid}`;
   }
 
-  if (url.startsWith("https://") || url.startsWith("http://")) {
+  if (url.startsWith("https://")) {
+    // Block requests to private/internal hostnames to prevent SSRF
+    try {
+      const parsed = new URL(url);
+      const hostname = parsed.hostname.toLowerCase();
+      if (isBlockedHostname(hostname)) {
+        return null;
+      }
+    } catch {
+      return null;
+    }
     return url;
   }
 
+  // Block plain http:// to prevent SSRF to internal services
   return null;
 }
 

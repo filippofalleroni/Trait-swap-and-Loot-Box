@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import algosdk from "algosdk";
 import { useWallet } from "@/contexts/wallet-context";
 import { useToast } from "@/contexts/toast-context";
@@ -36,6 +36,18 @@ const RARITY_BG: Record<TraitRarity, string> = {
 
 type MintStep = "idle" | "signing" | "submitting" | "minting" | "success" | "error";
 
+/**
+ * Categories where the user can choose to remove a trait entirely.
+ * BACKGROUND and SKIN are always required, so they are excluded.
+ */
+const REMOVABLE_CATEGORIES: OfficialTraitCategory[] = [
+  "BODY",
+  "COMPANION",
+  "EYES",
+  "MOUTH",
+  "TOP",
+];
+
 /* ------------------------------------------------------------------ */
 /*  Component                                                         */
 /* ------------------------------------------------------------------ */
@@ -48,6 +60,13 @@ export default function TraitSwapper() {
   const [ownedNfts, setOwnedNfts] = useState<CollectionNft[]>([]);
   const [selectedNft, setSelectedNft] = useState<CollectionNft | null>(null);
   const [loadingNfts, setLoadingNfts] = useState(false);
+  const [hasFetchedNfts, setHasFetchedNfts] = useState(false);
+  /**
+   * Set this to a message string if NFT loading fails and you want to show
+   * a dedicated error screen instead of falling back to mock data.
+   * By default the template uses mock data on failure, so this stays null.
+   */
+  const [nftLoadError, setNftLoadError] = useState<string | null>(null);
 
   // ---- Trait browsing state ----
   const [activeCategory, setActiveCategory] = useState<OfficialTraitCategory>("BACKGROUND");
@@ -66,43 +85,74 @@ export default function TraitSwapper() {
   // ---- Trait counts (how many times each trait has been applied) ----
   const [traitCounts, setTraitCounts] = useState<Record<string, number>>({});
 
+  // ---- Pending payment TX (stored in sessionStorage for crash recovery) ----
+  const [pendingPaymentTxId, setPendingPaymentTxId] = useState<string | null>(function initPending() {
+    if (typeof window === "undefined") return null;
+    try {
+      return sessionStorage.getItem("traitswap_pending_tx") || null;
+    } catch { return null; }
+  });
+
   /* ---------------------------------------------------------------- */
   /*  Load owned NFTs                                                 */
   /* ---------------------------------------------------------------- */
 
-  const loadOwnedNfts = useCallback(async () => {
-    if (!walletAddress) return;
+  useEffect(() => {
+    if (!isConnected || !walletAddress) return;
 
-    setLoadingNfts(true);
-    try {
-      const res = await fetch(`/api/owned-nfts?wallet=${walletAddress}`);
-      if (!res.ok) throw new Error("Failed to load NFTs");
+    var isCancelled = false;
 
-      const data = await res.json();
-      const nfts: CollectionNft[] = data.nfts ?? [];
+    // Delay showing the loading spinner by 300ms to avoid a flash for fast loads
+    var loadingTimer = setTimeout(function showLoading() {
+      if (!isCancelled) setLoadingNfts(true);
+    }, 300);
 
-      // If API returns empty (no collection configured), fall back to mock data
-      if (nfts.length === 0) {
+    setNftLoadError(null);
+
+    async function doLoad() {
+      try {
+        var res = await fetch(
+          "/api/owned-nfts?wallet=" + encodeURIComponent(walletAddress!),
+          { cache: "no-store" }
+        );
+        if (!res.ok) throw new Error("NFT API failed with status " + res.status);
+
+        var data = await res.json();
+        var nfts: CollectionNft[] = data.nfts ?? [];
+        if (isCancelled) return;
+
+        // If API returns empty (no collection configured), fall back to mock data
+        if (nfts.length === 0) {
+          setOwnedNfts(mockOwnedNfts);
+          setSelectedNft(mockOwnedNfts[0] ?? null);
+        } else {
+          setOwnedNfts(nfts);
+          setSelectedNft(nfts[0] ?? null);
+        }
+      } catch (err) {
+        if (isCancelled) return;
+        console.error("Failed to load owned NFTs", err);
+        // Fall back to mock data for demo/development.
+        // For production, remove the mock fallback and set the error instead:
+        //   setNftLoadError("Could not load NFTs from this wallet.");
         setOwnedNfts(mockOwnedNfts);
         setSelectedNft(mockOwnedNfts[0] ?? null);
-      } else {
-        setOwnedNfts(nfts);
-        setSelectedNft(nfts[0] ?? null);
+      } finally {
+        if (!isCancelled) {
+          clearTimeout(loadingTimer);
+          setLoadingNfts(false);
+          setHasFetchedNfts(true);
+        }
       }
-    } catch {
-      // Fall back to mock data for demo/development
-      setOwnedNfts(mockOwnedNfts);
-      setSelectedNft(mockOwnedNfts[0] ?? null);
-    } finally {
-      setLoadingNfts(false);
     }
-  }, [walletAddress]);
 
-  useEffect(() => {
-    if (isConnected) {
-      loadOwnedNfts();
-    }
-  }, [isConnected, loadOwnedNfts]);
+    void doLoad();
+
+    return function cleanup() {
+      isCancelled = true;
+      clearTimeout(loadingTimer);
+    };
+  }, [isConnected, walletAddress]);
 
   /* ---------------------------------------------------------------- */
   /*  Load trait counts                                               */
@@ -114,6 +164,20 @@ export default function TraitSwapper() {
       .then((data) => setTraitCounts(data ?? {}))
       .catch(() => {});
   }, []);
+
+  /* ---------------------------------------------------------------- */
+  /*  Pending payment TX persistence                                  */
+  /* ---------------------------------------------------------------- */
+
+  useEffect(() => {
+    try {
+      if (pendingPaymentTxId) {
+        sessionStorage.setItem("traitswap_pending_tx", pendingPaymentTxId);
+      } else {
+        sessionStorage.removeItem("traitswap_pending_tx");
+      }
+    } catch { /* sessionStorage unavailable */ }
+  }, [pendingPaymentTxId]);
 
   /* ---------------------------------------------------------------- */
   /*  Derived values                                                  */
@@ -155,6 +219,9 @@ export default function TraitSwapper() {
   const effectiveOverrides = previewingRemoval
     ? removalLayerOverrides
     : layerOverrides;
+
+  /** Whether the active category allows trait removal */
+  const canRemoveCategory = REMOVABLE_CATEGORIES.indexOf(activeCategory) !== -1;
 
   /* ---------------------------------------------------------------- */
   /*  Handlers                                                        */
@@ -201,80 +268,120 @@ export default function TraitSwapper() {
   async function executeMint() {
     if (!walletAddress || !selectedNft) return;
 
-    const traitId = selectedTrait?.id ?? `remove-${activeCategory}`;
-    const isRemoval = !selectedTrait;
+    var traitId = selectedTrait?.id ?? "remove-" + activeCategory;
+    var isRemoval = !selectedTrait;
 
     setShowConfirmModal(false);
     setMintStep("signing");
     setMintError(null);
     setMintResult(null);
+    setPendingPaymentTxId(null);
 
     try {
       // Step 1: Get unsigned payment transaction
-      const payRes = await fetch("/api/trait-lab/payment-tx", {
+      var payRes = await fetch("/api/trait-lab/payment-tx", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          walletAddress,
+          walletAddress: walletAddress,
           newTraitId: traitId,
         }),
       });
 
       if (!payRes.ok) {
-        const errData = await payRes.json().catch(() => ({}));
+        var errData = await payRes.json().catch(function () { return {} as Record<string, string>; });
         throw new Error(errData.error ?? "Failed to create payment transaction");
       }
 
-      const { unsignedTxnBase64 } = await payRes.json();
+      var payData = await payRes.json();
+      var unsignedTxnBase64: string = payData.unsignedTxnBase64;
 
       // Step 2: Sign with wallet
-      const txnBytes = new Uint8Array(Buffer.from(unsignedTxnBase64, "base64"));
+      var txnBytes = new Uint8Array(Buffer.from(unsignedTxnBase64, "base64"));
 
-      const signedTxns = await signTransactions([txnBytes]);
-      const signedTxn = signedTxns[0];
+      var signedTxns = await signTransactions([txnBytes]);
+      var signedTxn = signedTxns[0];
       if (!signedTxn) throw new Error("Transaction was not signed");
 
       // Step 3: Submit signed transaction to the chain
       setMintStep("submitting");
 
-      const algodClient = new algosdk.Algodv2("", ALGOD_BASE_URL, "");
-      const { txid: paymentTxId } = await algodClient
+      var algodClient = new algosdk.Algodv2("", ALGOD_BASE_URL, "");
+      var submitResult = await algodClient
         .sendRawTransaction(signedTxn)
         .do();
+      var paymentTxId: string = submitResult.txid;
+      setPendingPaymentTxId(paymentTxId);
       await algosdk.waitForConfirmation(algodClient, paymentTxId, 10);
 
       // Step 4: Trigger the mint / ARC-19 update
       setMintStep("minting");
 
-      const mintRes = await fetch("/api/trait-lab/mint", {
+      var mintRes = await fetch("/api/trait-lab/mint", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           nftAssetId: selectedNft.assetId,
           newTraitId: traitId,
-          walletAddress,
-          paymentTxId,
+          walletAddress: walletAddress,
+          paymentTxId: paymentTxId,
         }),
       });
 
       if (!mintRes.ok) {
-        const errData = await mintRes.json().catch(() => ({}));
-        throw new Error(errData.error ?? "Mint failed");
+        var mintErrData = await mintRes.json().catch(function () { return {} as Record<string, string>; });
+        throw new Error(mintErrData.error ?? "Mint failed");
       }
 
-      const result = await mintRes.json();
+      var result = await mintRes.json();
+
+      // Optimistic update: apply the trait change to the local NFT state immediately
+      if (selectedTrait && isOfficialTraitCategory(selectedTrait.category)) {
+        var updatedLayers = Object.assign({}, selectedNft.layers);
+        var updatedLayerImageUrls = Object.assign({}, selectedNft.layerImageUrls);
+        updatedLayers[selectedTrait.category as OfficialTraitCategory] = selectedTrait.name;
+        updatedLayerImageUrls[selectedTrait.category as OfficialTraitCategory] = selectedTrait.imageUrl;
+        var updatedNft: CollectionNft = Object.assign({}, selectedNft, {
+          layers: updatedLayers,
+          layerImageUrls: updatedLayerImageUrls,
+        });
+        setOwnedNfts(function updateList(current) {
+          return current.map(function replace(n) { return n.id === selectedNft.id ? updatedNft : n; });
+        });
+        setSelectedNft(updatedNft);
+      } else if (isRemoval && isOfficialTraitCategory(activeCategory)) {
+        var removedLayers = Object.assign({}, selectedNft.layers);
+        var removedLayerImageUrls = Object.assign({}, selectedNft.layerImageUrls);
+        delete removedLayers[activeCategory];
+        delete removedLayerImageUrls[activeCategory];
+        var removedNft: CollectionNft = Object.assign({}, selectedNft, {
+          layers: removedLayers,
+          layerImageUrls: removedLayerImageUrls,
+        });
+        setOwnedNfts(function updateList(current) {
+          return current.map(function replace(n) { return n.id === selectedNft.id ? removedNft : n; });
+        });
+        setSelectedNft(removedNft);
+      }
 
       setMintStep("success");
       setMintResult(result.note ?? (isRemoval ? "Trait removed successfully." : "Trait applied successfully."));
       pushToast(isRemoval ? "Trait removed!" : "Trait applied!");
+      setPendingPaymentTxId(null);
 
-      // Refresh NFTs after successful mint
-      loadOwnedNfts();
+      // Refresh trait counts so supply display stays accurate
+      fetch("/api/trait-counts")
+        .then(function (r) { return r.json(); })
+        .then(function (data) { setTraitCounts(data ?? {}); })
+        .catch(function () { /* ignore */ });
     } catch (err: unknown) {
       setMintStep("error");
-      const message = err instanceof Error ? err.message : "Something went wrong";
+      var message = err instanceof Error ? err.message : "Something went wrong";
       setMintError(message);
-      pushToast(`Error: ${message}`);
+      // Only show generic toast if payment hadn't gone through yet
+      if (!pendingPaymentTxId) {
+        pushToast("Error: " + message);
+      }
     }
   }
 
@@ -285,6 +392,7 @@ export default function TraitSwapper() {
     setSelectedTrait(null);
     setIsPreviewing(false);
     setPreviewingRemoval(false);
+    setPendingPaymentTxId(null);
   }
 
   /* ---------------------------------------------------------------- */
@@ -353,10 +461,17 @@ export default function TraitSwapper() {
         </div>
       )}
 
-      {/* Empty state */}
-      {!loadingNfts && ownedNfts.length === 0 && (
+      {/* Error state */}
+      {!loadingNfts && nftLoadError && ownedNfts.length === 0 && (
         <div className="flex flex-col items-center justify-center gap-4 rounded-xl border border-zinc-800 bg-zinc-900/60 p-12 text-center">
-          <div className="text-4xl">🖼</div>
+          <h3 className="text-lg font-semibold text-zinc-200">NFT Load Failed</h3>
+          <p className="text-sm text-zinc-400 max-w-md">{nftLoadError}</p>
+        </div>
+      )}
+
+      {/* Empty state */}
+      {!loadingNfts && !nftLoadError && hasFetchedNfts && ownedNfts.length === 0 && (
+        <div className="flex flex-col items-center justify-center gap-4 rounded-xl border border-zinc-800 bg-zinc-900/60 p-12 text-center">
           <h3 className="text-lg font-semibold text-zinc-200">No NFTs Found</h3>
           <p className="text-sm text-zinc-400 max-w-md">
             We couldn&apos;t find any collection NFTs in your wallet. Make sure
@@ -502,8 +617,8 @@ export default function TraitSwapper() {
               </div>
             </div>
 
-            {/* Remove trait option */}
-            {currentTraitName && (
+            {/* Remove trait option (only for categories that allow removal) */}
+            {currentTraitName && canRemoveCategory && (
               <button
                 onClick={handlePreviewRemoval}
                 className={`w-full rounded-lg border px-4 py-3 text-sm text-left transition-all ${
@@ -855,7 +970,32 @@ export default function TraitSwapper() {
                 <h3 className="text-lg font-semibold text-zinc-100 mb-1">
                   Error
                 </h3>
-                <p className="text-sm text-red-400 mb-5">{mintError}</p>
+                <p className="text-sm text-red-400 mb-3">{mintError}</p>
+
+                {/* Warn if payment was confirmed but mint failed */}
+                {pendingPaymentTxId && (
+                  <div className="rounded-lg border border-yellow-600/40 bg-yellow-900/20 px-4 py-3 mb-4 text-left">
+                    <p className="text-sm font-semibold text-yellow-300">
+                      Payment was confirmed on-chain
+                    </p>
+                    <p className="mt-1 text-xs leading-relaxed text-yellow-200/80">
+                      Your payment went through but we lost the response &mdash; possibly
+                      due to a network interruption. Your NFT may already be updated.
+                      Please check before retrying.
+                    </p>
+                    {selectedNft?.assetId && (
+                      <a
+                        href={"https://allo.info/asset/" + selectedNft.assetId + "/nft"}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-2 inline-block text-xs font-medium text-yellow-300 hover:text-yellow-100 transition-colors"
+                      >
+                        Check NFT on Allo.info &rarr;
+                      </a>
+                    )}
+                  </div>
+                )}
+
                 <button
                   onClick={resetMintState}
                   className="rounded-lg border border-zinc-700 bg-zinc-800 px-6 py-2.5 text-sm font-medium text-zinc-300 hover:bg-zinc-700 transition-colors"

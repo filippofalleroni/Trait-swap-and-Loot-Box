@@ -1,7 +1,10 @@
-"use client";
-
 import WalletGate from "@/components/wallet-gate";
 import LootboxStudio from "@/components/lootbox-studio";
+
+export const metadata = {
+  title: "Loot Box",
+  description: "Open loot boxes for a chance to win prizes.",
+};
 
 export default function LootboxPage() {
   return (
