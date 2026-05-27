@@ -106,7 +106,7 @@ Copy `.env.example` to `.env.local` and configure:
 | Variable | Description | Default |
 |---|---|---|
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob storage token for persisting prize configuration across deployments. Without this, prize config saves to `/tmp/` (resets on redeploy). | *(empty)* |
-| `LOOTBOX_PRIZES_BLOB_URL` | Direct URL to the Blob-stored prize JSON. Required alongside `BLOB_READ_WRITE_TOKEN` for the reveal and prize routes to read admin-saved prize config. | *(empty)* |
+| `LOOTBOX_PRIZES_BLOB_URL` | Optional fallback URL to the Blob-stored prize JSON. When `BLOB_READ_WRITE_TOKEN` is set, the prize and reveal routes automatically find admin-saved prizes via the Blob SDK. Only needed if automatic lookup fails. | *(empty)* |
 
 ---
 
@@ -119,7 +119,7 @@ Customize these files in the `config/` directory before deploying:
 | `config/collection.ts` | Set your collection's **creator address**, unit name prefix, and size. The creator address determines which NFTs are recognized as belonging to your collection. |
 | `config/lootbox.ts` | Define prize tiers with asset IDs, amounts, weights, rarity levels, and display colors. Also sets crate price and commit delay rounds. |
 | `config/fees.ts` | Configure the trait removal fee (default: 5 ALGO) and estimated transaction fee parameters. |
-| `config/admin.ts` | Hardcode admin wallet addresses (alternative to the `ADMIN_WALLETS` env var). |
+| `config/admin.ts` | Hardcode admin wallet addresses (alternative to the `NEXT_PUBLIC_ADMIN_WALLETS` env var). |
 | `config/mock-data.ts` | Define available traits with IDs, names, categories, rarity, prices, and image paths. Replace with a database-backed registry for production. |
 | `config/site.ts` | Set the site name and description displayed in the UI. |
 
