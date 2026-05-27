@@ -156,7 +156,7 @@ The smart contract (in `contracts/lootbox-commit-reveal/`) implements:
 |---|---|
 | `createApplication(treasury, price)` | Deploy-time setup. Sets the treasury address and crate price in global state. |
 | `configure(treasury, price)` | Creator-only. Updates treasury address and/or crate price after deployment. |
-| `commit()` | Verifies the preceding payment in the atomic group (correct receiver, amount, sender), then records the current round. |
+| `commit()` | Verifies the preceding payment in the atomic group (correct receiver, amount, sender). Rejects if the sender already has an active commit. Records the current round. |
 | `reveal()` | Reads the VRF seed from block `commitRound + 1`, extracts a random `uint64`, deletes the commit box, and returns the value. Requires at least 9 rounds to have passed (strict `>`). Fails after 900 rounds. |
 | `reclaim()` | Cleans up expired commits (900+ rounds old) so users can recommit. Frees the associated box MBR. |
 
@@ -227,8 +227,8 @@ This lets you develop the UI, test wallet integration, and verify payment flows 
 - **Wallet separation** -- The template recommends using separate wallets for the manager (metadata authority) and the master (prize pool), limiting blast radius if a key is compromised.
 - **Loot box pause switch** -- Set `LOOTBOX_PAUSED=true` to immediately halt new commits and reveals without redeploying.
 - **On-chain randomness** -- In live mode, randomness is generated entirely by the smart contract via VRF seed extraction. The server reads the ABI return value from the confirmed reveal transaction -- it never touches the VRF seed directly. There is no fallback to server-side `crypto.randomBytes` in live mode.
-- **Contract-enforced payment** -- The smart contract's `commit()` method verifies the preceding payment in the atomic group (correct receiver, amount, sender). No one can commit without paying.
-- **Atomic group verification** -- In live mode, the commit transaction group (payment + app call) is built server-side with `assignGroupID`. The reveal route verifies the on-chain reveal transaction's app ID and sender.
+- **Contract-enforced payment** -- The smart contract's `commit()` method verifies the preceding payment in the atomic group (correct receiver, amount, sender). No one can commit without paying. A second commit is rejected if the sender already has an active commit box, preventing silent payment loss.
+- **Atomic group verification** -- In live mode, the commit transaction group (payment + app call) is built server-side with `assignGroupID`. The reveal route verifies the on-chain reveal transaction's app ID, sender, and ABI method selector.
 
 ### Production Hardening Recommendations
 

@@ -1,0 +1,705 @@
+[
+  {
+    "teal": 1,
+    "source": "lootbox-commit-reveal/contract.algo.ts:36"
+  },
+  {
+    "teal": 2,
+    "source": "lootbox-commit-reveal/contract.algo.ts:36"
+  },
+  {
+    "teal": 3,
+    "source": "lootbox-commit-reveal/contract.algo.ts:36"
+  },
+  {
+    "teal": 15,
+    "source": "lootbox-commit-reveal/contract.algo.ts:36"
+  },
+  {
+    "teal": 16,
+    "source": "lootbox-commit-reveal/contract.algo.ts:36"
+  },
+  {
+    "teal": 17,
+    "source": "lootbox-commit-reveal/contract.algo.ts:36"
+  },
+  {
+    "teal": 18,
+    "source": "lootbox-commit-reveal/contract.algo.ts:36"
+  },
+  {
+    "teal": 19,
+    "source": "lootbox-commit-reveal/contract.algo.ts:36"
+  },
+  {
+    "teal": 20,
+    "source": "lootbox-commit-reveal/contract.algo.ts:36"
+  },
+  {
+    "teal": 21,
+    "source": "lootbox-commit-reveal/contract.algo.ts:36"
+  },
+  {
+    "teal": 25,
+    "source": "lootbox-commit-reveal/contract.algo.ts:36",
+    "errorMessage": "The requested action is not implemented in this contract. Are you using the correct OnComplete? Did you set your app ID?"
+  },
+  {
+    "teal": 30,
+    "source": "lootbox-commit-reveal/contract.algo.ts:41"
+  },
+  {
+    "teal": 31,
+    "source": "lootbox-commit-reveal/contract.algo.ts:41"
+  },
+  {
+    "teal": 34,
+    "source": "lootbox-commit-reveal/contract.algo.ts:41"
+  },
+  {
+    "teal": 35,
+    "source": "lootbox-commit-reveal/contract.algo.ts:41"
+  },
+  {
+    "teal": 36,
+    "source": "lootbox-commit-reveal/contract.algo.ts:41"
+  },
+  {
+    "teal": 37,
+    "source": "lootbox-commit-reveal/contract.algo.ts:41"
+  },
+  {
+    "teal": 38,
+    "source": "lootbox-commit-reveal/contract.algo.ts:41"
+  },
+  {
+    "teal": 41,
+    "source": "lootbox-commit-reveal/contract.algo.ts:41",
+    "errorMessage": "argument 1 (treasury) for createApplication must be a address"
+  },
+  {
+    "teal": 44,
+    "source": "lootbox-commit-reveal/contract.algo.ts:41"
+  },
+  {
+    "teal": 45,
+    "source": "lootbox-commit-reveal/contract.algo.ts:41"
+  },
+  {
+    "teal": 46,
+    "source": "lootbox-commit-reveal/contract.algo.ts:41"
+  },
+  {
+    "teal": 50,
+    "source": "lootbox-commit-reveal/contract.algo.ts:41"
+  },
+  {
+    "teal": 54,
+    "source": "lootbox-commit-reveal/contract.algo.ts:42"
+  },
+  {
+    "teal": 55,
+    "source": "lootbox-commit-reveal/contract.algo.ts:42"
+  },
+  {
+    "teal": 56,
+    "source": "lootbox-commit-reveal/contract.algo.ts:42"
+  },
+  {
+    "teal": 60,
+    "source": "lootbox-commit-reveal/contract.algo.ts:43"
+  },
+  {
+    "teal": 61,
+    "source": "lootbox-commit-reveal/contract.algo.ts:43"
+  },
+  {
+    "teal": 62,
+    "source": "lootbox-commit-reveal/contract.algo.ts:43"
+  },
+  {
+    "teal": 63,
+    "source": "lootbox-commit-reveal/contract.algo.ts:41"
+  },
+  {
+    "teal": 68,
+    "source": "lootbox-commit-reveal/contract.algo.ts:46"
+  },
+  {
+    "teal": 69,
+    "source": "lootbox-commit-reveal/contract.algo.ts:46"
+  },
+  {
+    "teal": 72,
+    "source": "lootbox-commit-reveal/contract.algo.ts:46"
+  },
+  {
+    "teal": 73,
+    "source": "lootbox-commit-reveal/contract.algo.ts:46"
+  },
+  {
+    "teal": 74,
+    "source": "lootbox-commit-reveal/contract.algo.ts:46"
+  },
+  {
+    "teal": 75,
+    "source": "lootbox-commit-reveal/contract.algo.ts:46"
+  },
+  {
+    "teal": 76,
+    "source": "lootbox-commit-reveal/contract.algo.ts:46"
+  },
+  {
+    "teal": 79,
+    "source": "lootbox-commit-reveal/contract.algo.ts:46",
+    "errorMessage": "argument 1 (treasury) for configure must be a address"
+  },
+  {
+    "teal": 82,
+    "source": "lootbox-commit-reveal/contract.algo.ts:46"
+  },
+  {
+    "teal": 83,
+    "source": "lootbox-commit-reveal/contract.algo.ts:46"
+  },
+  {
+    "teal": 84,
+    "source": "lootbox-commit-reveal/contract.algo.ts:46"
+  },
+  {
+    "teal": 88,
+    "source": "lootbox-commit-reveal/contract.algo.ts:46"
+  },
+  {
+    "teal": 92,
+    "source": "lootbox-commit-reveal/contract.algo.ts:47"
+  },
+  {
+    "teal": 93,
+    "source": "lootbox-commit-reveal/contract.algo.ts:47"
+  },
+  {
+    "teal": 94,
+    "source": "lootbox-commit-reveal/contract.algo.ts:47"
+  },
+  {
+    "teal": 95,
+    "source": "lootbox-commit-reveal/contract.algo.ts:47"
+  },
+  {
+    "teal": 96,
+    "source": "lootbox-commit-reveal/contract.algo.ts:47"
+  },
+  {
+    "teal": 97,
+    "source": "lootbox-commit-reveal/contract.algo.ts:47"
+  },
+  {
+    "teal": 101,
+    "source": "lootbox-commit-reveal/contract.algo.ts:48"
+  },
+  {
+    "teal": 102,
+    "source": "lootbox-commit-reveal/contract.algo.ts:48"
+  },
+  {
+    "teal": 103,
+    "source": "lootbox-commit-reveal/contract.algo.ts:48"
+  },
+  {
+    "teal": 107,
+    "source": "lootbox-commit-reveal/contract.algo.ts:49"
+  },
+  {
+    "teal": 108,
+    "source": "lootbox-commit-reveal/contract.algo.ts:49"
+  },
+  {
+    "teal": 109,
+    "source": "lootbox-commit-reveal/contract.algo.ts:49"
+  },
+  {
+    "teal": 110,
+    "source": "lootbox-commit-reveal/contract.algo.ts:46"
+  },
+  {
+    "teal": 115,
+    "source": "lootbox-commit-reveal/contract.algo.ts:52"
+  },
+  {
+    "teal": 116,
+    "source": "lootbox-commit-reveal/contract.algo.ts:52"
+  },
+  {
+    "teal": 117,
+    "source": "lootbox-commit-reveal/contract.algo.ts:52"
+  },
+  {
+    "teal": 121,
+    "source": "lootbox-commit-reveal/contract.algo.ts:52"
+  },
+  {
+    "teal": 124,
+    "source": "lootbox-commit-reveal/contract.algo.ts:52"
+  },
+  {
+    "teal": 128,
+    "source": "lootbox-commit-reveal/contract.algo.ts:56"
+  },
+  {
+    "teal": 129,
+    "source": "lootbox-commit-reveal/contract.algo.ts:56"
+  },
+  {
+    "teal": 130,
+    "source": "lootbox-commit-reveal/contract.algo.ts:56"
+  },
+  {
+    "teal": 131,
+    "source": "lootbox-commit-reveal/contract.algo.ts:56"
+  },
+  {
+    "teal": 135,
+    "source": "lootbox-commit-reveal/contract.algo.ts:57"
+  },
+  {
+    "teal": 136,
+    "source": "lootbox-commit-reveal/contract.algo.ts:57"
+  },
+  {
+    "teal": 137,
+    "source": "lootbox-commit-reveal/contract.algo.ts:57"
+  },
+  {
+    "teal": 138,
+    "source": "lootbox-commit-reveal/contract.algo.ts:57"
+  },
+  {
+    "teal": 142,
+    "source": "lootbox-commit-reveal/contract.algo.ts:58"
+  },
+  {
+    "teal": 143,
+    "source": "lootbox-commit-reveal/contract.algo.ts:58"
+  },
+  {
+    "teal": 144,
+    "source": "lootbox-commit-reveal/contract.algo.ts:58"
+  },
+  {
+    "teal": 145,
+    "source": "lootbox-commit-reveal/contract.algo.ts:58"
+  },
+  {
+    "teal": 146,
+    "source": "lootbox-commit-reveal/contract.algo.ts:58"
+  },
+  {
+    "teal": 150,
+    "source": "lootbox-commit-reveal/contract.algo.ts:59"
+  },
+  {
+    "teal": 151,
+    "source": "lootbox-commit-reveal/contract.algo.ts:59"
+  },
+  {
+    "teal": 152,
+    "source": "lootbox-commit-reveal/contract.algo.ts:59"
+  },
+  {
+    "teal": 153,
+    "source": "lootbox-commit-reveal/contract.algo.ts:59"
+  },
+  {
+    "teal": 154,
+    "source": "lootbox-commit-reveal/contract.algo.ts:59"
+  },
+  {
+    "teal": 155,
+    "source": "lootbox-commit-reveal/contract.algo.ts:59"
+  },
+  {
+    "teal": 159,
+    "source": "lootbox-commit-reveal/contract.algo.ts:60"
+  },
+  {
+    "teal": 160,
+    "source": "lootbox-commit-reveal/contract.algo.ts:60"
+  },
+  {
+    "teal": 161,
+    "source": "lootbox-commit-reveal/contract.algo.ts:60"
+  },
+  {
+    "teal": 162,
+    "source": "lootbox-commit-reveal/contract.algo.ts:60"
+  },
+  {
+    "teal": 163,
+    "source": "lootbox-commit-reveal/contract.algo.ts:60"
+  },
+  {
+    "teal": 164,
+    "source": "lootbox-commit-reveal/contract.algo.ts:60"
+  },
+  {
+    "teal": 168,
+    "source": "lootbox-commit-reveal/contract.algo.ts:61"
+  },
+  {
+    "teal": 169,
+    "source": "lootbox-commit-reveal/contract.algo.ts:61"
+  },
+  {
+    "teal": 170,
+    "source": "lootbox-commit-reveal/contract.algo.ts:61"
+  },
+  {
+    "teal": 171,
+    "source": "lootbox-commit-reveal/contract.algo.ts:61"
+  },
+  {
+    "teal": 172,
+    "source": "lootbox-commit-reveal/contract.algo.ts:61"
+  },
+  {
+    "teal": 176,
+    "source": "lootbox-commit-reveal/contract.algo.ts:66"
+  },
+  {
+    "teal": 177,
+    "source": "lootbox-commit-reveal/contract.algo.ts:66"
+  },
+  {
+    "teal": 178,
+    "source": "lootbox-commit-reveal/contract.algo.ts:66"
+  },
+  {
+    "teal": 179,
+    "source": "lootbox-commit-reveal/contract.algo.ts:66"
+  },
+  {
+    "teal": 180,
+    "source": "lootbox-commit-reveal/contract.algo.ts:66"
+  },
+  {
+    "teal": 183,
+    "source": "lootbox-commit-reveal/contract.algo.ts:66",
+    "errorMessage": "Active commit exists — reveal or reclaim first"
+  },
+  {
+    "teal": 187,
+    "source": "lootbox-commit-reveal/contract.algo.ts:68"
+  },
+  {
+    "teal": 188,
+    "source": "lootbox-commit-reveal/contract.algo.ts:68"
+  },
+  {
+    "teal": 189,
+    "source": "lootbox-commit-reveal/contract.algo.ts:68"
+  },
+  {
+    "teal": 190,
+    "source": "lootbox-commit-reveal/contract.algo.ts:68"
+  },
+  {
+    "teal": 191,
+    "source": "lootbox-commit-reveal/contract.algo.ts:52"
+  },
+  {
+    "teal": 196,
+    "source": "lootbox-commit-reveal/contract.algo.ts:71"
+  },
+  {
+    "teal": 199,
+    "source": "lootbox-commit-reveal/contract.algo.ts:71"
+  },
+  {
+    "teal": 200,
+    "source": "lootbox-commit-reveal/contract.algo.ts:71"
+  },
+  {
+    "teal": 201,
+    "source": "lootbox-commit-reveal/contract.algo.ts:71"
+  },
+  {
+    "teal": 202,
+    "source": "lootbox-commit-reveal/contract.algo.ts:71"
+  },
+  {
+    "teal": 203,
+    "source": "lootbox-commit-reveal/contract.algo.ts:71"
+  },
+  {
+    "teal": 204,
+    "source": "lootbox-commit-reveal/contract.algo.ts:71"
+  },
+  {
+    "teal": 208,
+    "source": "lootbox-commit-reveal/contract.algo.ts:71"
+  },
+  {
+    "teal": 211,
+    "source": "lootbox-commit-reveal/contract.algo.ts:71"
+  },
+  {
+    "teal": 212,
+    "source": "lootbox-commit-reveal/contract.algo.ts:71"
+  },
+  {
+    "teal": 216,
+    "source": "lootbox-commit-reveal/contract.algo.ts:72"
+  },
+  {
+    "teal": 217,
+    "source": "lootbox-commit-reveal/contract.algo.ts:72"
+  },
+  {
+    "teal": 220,
+    "source": "lootbox-commit-reveal/contract.algo.ts:72",
+    "errorMessage": "box value does not exist: this.commitRound(this.txn.sender).value"
+  },
+  {
+    "teal": 221,
+    "source": "lootbox-commit-reveal/contract.algo.ts:72"
+  },
+  {
+    "teal": 222,
+    "source": "lootbox-commit-reveal/contract.algo.ts:72"
+  },
+  {
+    "teal": 226,
+    "source": "lootbox-commit-reveal/contract.algo.ts:74"
+  },
+  {
+    "teal": 227,
+    "source": "lootbox-commit-reveal/contract.algo.ts:74"
+  },
+  {
+    "teal": 228,
+    "source": "lootbox-commit-reveal/contract.algo.ts:74"
+  },
+  {
+    "teal": 229,
+    "source": "lootbox-commit-reveal/contract.algo.ts:74"
+  },
+  {
+    "teal": 230,
+    "source": "lootbox-commit-reveal/contract.algo.ts:74"
+  },
+  {
+    "teal": 233,
+    "source": "lootbox-commit-reveal/contract.algo.ts:74",
+    "errorMessage": "Must wait at least 8 rounds after commit"
+  },
+  {
+    "teal": 237,
+    "source": "lootbox-commit-reveal/contract.algo.ts:75"
+  },
+  {
+    "teal": 238,
+    "source": "lootbox-commit-reveal/contract.algo.ts:75"
+  },
+  {
+    "teal": 239,
+    "source": "lootbox-commit-reveal/contract.algo.ts:75"
+  },
+  {
+    "teal": 240,
+    "source": "lootbox-commit-reveal/contract.algo.ts:75"
+  },
+  {
+    "teal": 241,
+    "source": "lootbox-commit-reveal/contract.algo.ts:75"
+  },
+  {
+    "teal": 244,
+    "source": "lootbox-commit-reveal/contract.algo.ts:75",
+    "errorMessage": "Commit expired — call reclaim() and recommit"
+  },
+  {
+    "teal": 248,
+    "source": "lootbox-commit-reveal/contract.algo.ts:77"
+  },
+  {
+    "teal": 249,
+    "source": "lootbox-commit-reveal/contract.algo.ts:77"
+  },
+  {
+    "teal": 250,
+    "source": "lootbox-commit-reveal/contract.algo.ts:77"
+  },
+  {
+    "teal": 251,
+    "source": "lootbox-commit-reveal/contract.algo.ts:77"
+  },
+  {
+    "teal": 252,
+    "source": "lootbox-commit-reveal/contract.algo.ts:77"
+  },
+  {
+    "teal": 256,
+    "source": "lootbox-commit-reveal/contract.algo.ts:79"
+  },
+  {
+    "teal": 257,
+    "source": "lootbox-commit-reveal/contract.algo.ts:79"
+  },
+  {
+    "teal": 258,
+    "source": "lootbox-commit-reveal/contract.algo.ts:79"
+  },
+  {
+    "teal": 259,
+    "source": "lootbox-commit-reveal/contract.algo.ts:79"
+  },
+  {
+    "teal": 263,
+    "source": "lootbox-commit-reveal/contract.algo.ts:81"
+  },
+  {
+    "teal": 264,
+    "source": "lootbox-commit-reveal/contract.algo.ts:81"
+  },
+  {
+    "teal": 268,
+    "source": "lootbox-commit-reveal/contract.algo.ts:82"
+  },
+  {
+    "teal": 271,
+    "source": "lootbox-commit-reveal/contract.algo.ts:71"
+  },
+  {
+    "teal": 274,
+    "source": "lootbox-commit-reveal/contract.algo.ts:71"
+  },
+  {
+    "teal": 275,
+    "source": "lootbox-commit-reveal/contract.algo.ts:71"
+  },
+  {
+    "teal": 280,
+    "source": "lootbox-commit-reveal/contract.algo.ts:85"
+  },
+  {
+    "teal": 281,
+    "source": "lootbox-commit-reveal/contract.algo.ts:85"
+  },
+  {
+    "teal": 282,
+    "source": "lootbox-commit-reveal/contract.algo.ts:85"
+  },
+  {
+    "teal": 286,
+    "source": "lootbox-commit-reveal/contract.algo.ts:85"
+  },
+  {
+    "teal": 289,
+    "source": "lootbox-commit-reveal/contract.algo.ts:85"
+  },
+  {
+    "teal": 293,
+    "source": "lootbox-commit-reveal/contract.algo.ts:86"
+  },
+  {
+    "teal": 294,
+    "source": "lootbox-commit-reveal/contract.algo.ts:86"
+  },
+  {
+    "teal": 297,
+    "source": "lootbox-commit-reveal/contract.algo.ts:86",
+    "errorMessage": "box value does not exist: this.commitRound(this.txn.sender).value"
+  },
+  {
+    "teal": 298,
+    "source": "lootbox-commit-reveal/contract.algo.ts:86"
+  },
+  {
+    "teal": 299,
+    "source": "lootbox-commit-reveal/contract.algo.ts:86"
+  },
+  {
+    "teal": 303,
+    "source": "lootbox-commit-reveal/contract.algo.ts:87"
+  },
+  {
+    "teal": 304,
+    "source": "lootbox-commit-reveal/contract.algo.ts:87"
+  },
+  {
+    "teal": 305,
+    "source": "lootbox-commit-reveal/contract.algo.ts:87"
+  },
+  {
+    "teal": 306,
+    "source": "lootbox-commit-reveal/contract.algo.ts:87"
+  },
+  {
+    "teal": 307,
+    "source": "lootbox-commit-reveal/contract.algo.ts:87"
+  },
+  {
+    "teal": 310,
+    "source": "lootbox-commit-reveal/contract.algo.ts:87",
+    "errorMessage": "Commit has not expired yet"
+  },
+  {
+    "teal": 314,
+    "source": "lootbox-commit-reveal/contract.algo.ts:88"
+  },
+  {
+    "teal": 315,
+    "source": "lootbox-commit-reveal/contract.algo.ts:88"
+  },
+  {
+    "teal": 316,
+    "source": "lootbox-commit-reveal/contract.algo.ts:85"
+  },
+  {
+    "teal": 319,
+    "source": "lootbox-commit-reveal/contract.algo.ts:36"
+  },
+  {
+    "teal": 320,
+    "source": "lootbox-commit-reveal/contract.algo.ts:36"
+  },
+  {
+    "teal": 321,
+    "source": "lootbox-commit-reveal/contract.algo.ts:36"
+  },
+  {
+    "teal": 324,
+    "source": "lootbox-commit-reveal/contract.algo.ts:36",
+    "errorMessage": "this contract does not implement the given ABI method for create NoOp"
+  },
+  {
+    "teal": 327,
+    "source": "lootbox-commit-reveal/contract.algo.ts:36"
+  },
+  {
+    "teal": 328,
+    "source": "lootbox-commit-reveal/contract.algo.ts:36"
+  },
+  {
+    "teal": 329,
+    "source": "lootbox-commit-reveal/contract.algo.ts:36"
+  },
+  {
+    "teal": 330,
+    "source": "lootbox-commit-reveal/contract.algo.ts:36"
+  },
+  {
+    "teal": 331,
+    "source": "lootbox-commit-reveal/contract.algo.ts:36"
+  },
+  {
+    "teal": 332,
+    "source": "lootbox-commit-reveal/contract.algo.ts:36"
+  },
+  {
+    "teal": 335,
+    "source": "lootbox-commit-reveal/contract.algo.ts:36",
+    "errorMessage": "this contract does not implement the given ABI method for call NoOp"
+  }
+]

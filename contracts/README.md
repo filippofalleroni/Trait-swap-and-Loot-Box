@@ -21,6 +21,10 @@ The `commit()` method verifies that the preceding transaction in the atomic grou
 - The treasury address and crate price are stored in global state and set at deployment via `createApplication()`.
 - Only the contract creator can update them via `configure()`.
 
+### Double-Commit Protection
+
+The contract rejects `commit()` if the sender already has an active commit box. Without this, a second commit would silently overwrite the first, losing the original payment. Users must call `reveal()` or `reclaim()` before they can commit again.
+
 ### VRF Round Expiry
 
 Algorand only retains block headers for approximately 1000 rounds. If a user commits but doesn't reveal within that window, the VRF seed becomes inaccessible. The contract enforces a 900-round expiry (conservative buffer) and provides a `reclaim()` method so users can clean up expired commits and recommit.
@@ -38,13 +42,16 @@ If you need multiple random values from a single seed (e.g. rolling several dice
 ### Prerequisites
 
 - [AlgoKit](https://developer.algorand.org/docs/get-started/algokit/) installed
-- TEALScript compiler (`npm install -g @algorandfoundation/tealscript`)
+- TEALScript compiler (`npm install --save-dev @algorandfoundation/tealscript`)
+
+Pre-compiled TEAL artifacts are included in the `artifacts/` directory (ARC-32, ARC-56 app specs, approval/clear programs, and source map). You only need to recompile if you modify the contract.
 
 ### Steps
 
-1. Compile the contract:
+1. Compile the contract (run from the `contracts/` directory so it picks up the local `tsconfig.json`):
    ```bash
-   npx tealscript contracts/lootbox-commit-reveal/contract.algo.ts contracts/lootbox-commit-reveal/artifacts
+   cd contracts
+   npx tealscript lootbox-commit-reveal/contract.algo.ts lootbox-commit-reveal/artifacts --skip-algod
    ```
 
 2. Deploy using AlgoKit or `goal`. The `createApplication` call requires two arguments:
@@ -87,7 +94,7 @@ Then deploy to LocalNet and run the loot box flow end-to-end.
 |--------|-------------|
 | `createApplication(treasury, price)` | Deploy-time setup. Sets the treasury address and crate price in global state. |
 | `configure(treasury, price)` | Creator-only. Updates the treasury address and/or crate price. |
-| `commit()` | Verifies the preceding payment in the atomic group (correct receiver, amount, sender), then records the current round for the caller. |
+| `commit()` | Verifies the preceding payment in the atomic group (correct receiver, amount, sender). Rejects if the sender already has an active commit. Records the current round. |
 | `reveal()` | Reads the VRF seed from `blocks[committed+1]`, returns a random `uint64`, deletes the commit box. Requires at least 9 rounds to have passed (strict `>`). Fails after 900 rounds. |
 | `reclaim()` | Deletes an expired commit (900+ rounds old) so the user can recommit. Frees the associated box MBR. |
 

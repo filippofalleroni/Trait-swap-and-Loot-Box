@@ -6,13 +6,18 @@ import { getAlgodClient } from "@/lib/algorand";
 const CONTRACT_APP_ID = Number(process.env.LOOTBOX_CONTRACT_APP_ID ?? "0");
 
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const ipRateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX = 10;
+const IP_RATE_LIMIT_MAX = 20;
 
 function pruneRateLimitMap() {
   const now = Date.now();
   rateLimitMap.forEach((entry, key) => {
     if (now >= entry.resetAt) rateLimitMap.delete(key);
+  });
+  ipRateLimitMap.forEach((entry, key) => {
+    if (now >= entry.resetAt) ipRateLimitMap.delete(key);
   });
 }
 
@@ -28,10 +33,42 @@ function isRateLimited(key: string): boolean {
   return entry.count > RATE_LIMIT_MAX;
 }
 
+function isIpRateLimited(ip: string): boolean {
+  const now = Date.now();
+  if (ipRateLimitMap.size > 1000) pruneRateLimitMap();
+  const entry = ipRateLimitMap.get(ip);
+  if (!entry || now >= entry.resetAt) {
+    ipRateLimitMap.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return false;
+  }
+  entry.count++;
+  return entry.count > IP_RATE_LIMIT_MAX;
+}
+
+function getClientIp(request: Request): string {
+  const forwarded = (request.headers as Headers).get("x-forwarded-for");
+  return forwarded?.split(",")[0]?.trim() || "unknown";
+}
+
 export async function POST(request: Request) {
   try {
+    const clientIp = getClientIp(request);
+    if (isIpRateLimited(clientIp)) {
+      return NextResponse.json(
+        { error: "Too many requests. Please wait a minute." },
+        { status: 429 }
+      );
+    }
+
     const body = await request.json();
     const { walletAddress } = body as { walletAddress?: string };
+
+    if (process.env.LOOTBOX_PAUSED === "true") {
+      return NextResponse.json(
+        { error: "Loot box is temporarily paused." },
+        { status: 503 }
+      );
+    }
 
     if (!walletAddress || !algosdk.isValidAddress(walletAddress)) {
       return NextResponse.json(

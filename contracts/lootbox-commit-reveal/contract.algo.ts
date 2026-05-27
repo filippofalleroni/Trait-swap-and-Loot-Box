@@ -60,6 +60,11 @@ class LootBoxCommitReveal extends Contract {
     assert(payTxn.amount >= this.cratePrice.value);
     assert(payTxn.sender === this.txn.sender);
 
+    // Reject if the sender already has an active commit. Without this,
+    // a second commit would silently overwrite the first, losing the
+    // original payment. The user must reveal() or reclaim() first.
+    assert(!this.commitRound(this.txn.sender).exists, "Active commit exists — reveal or reclaim first");
+
     this.commitRound(this.txn.sender).value = globals.round;
   }
 

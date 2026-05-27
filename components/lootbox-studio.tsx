@@ -226,9 +226,11 @@ export default function LootboxStudio() {
     );
     const encoded = algosdk.encodeUnsignedTransaction(decoded);
     const signedArr = await signTransactions!([encoded]);
-    const signed = signedArr.filter((s): s is Uint8Array => s !== null);
+    if (!signedArr[0]) {
+      throw new Error("Wallet declined to sign the reveal transaction.");
+    }
 
-    const { txid } = await algodClient.sendRawTransaction(signed).do();
+    const { txid } = await algodClient.sendRawTransaction([signedArr[0]]).do();
     await algosdk.waitForConfirmation(algodClient, txid as string, 10);
 
     return txid as string;

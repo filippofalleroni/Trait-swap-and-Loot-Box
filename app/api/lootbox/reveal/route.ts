@@ -24,6 +24,9 @@ const CRATE_PRICE_MICRO = Math.round(
 );
 const ALGO_TXID_REGEX = /^[A-Z2-7]{52}$/;
 const ABI_RETURN_PREFIX = Buffer.from("151f7c75", "hex");
+const REVEAL_SELECTOR_B64 = Buffer.from("750ec9b5", "hex").toString("base64");
+const MAX_PAYMENT_AGE_SECONDS = 600;
+const MAX_REVEAL_AGE_SECONDS = 300;
 
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT_WINDOW_MS = 60_000;
@@ -108,6 +111,9 @@ const SAFE_ERRORS = new Set([
   "Reveal transaction is not an application call.",
   "Reveal transaction targets wrong contract.",
   "Reveal sender does not match wallet.",
+  "Reveal transaction has unexpected on-completion type.",
+  "Reveal transaction does not call the reveal() method.",
+  "Reveal transaction is too old. Please try again.",
   "Reveal transaction has no ABI return value.",
 ]);
 
@@ -123,6 +129,7 @@ function safeErrorMessage(error: unknown): string {
 
 export async function POST(request: NextRequest) {
   let claimedTxId: string | null = null;
+  let claimedRevealTxId: string | null = null;
   let distributionAttempted = false;
 
   try {
@@ -267,6 +274,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Claim the revealTxId immediately to prevent a race condition where
+    // two concurrent requests both pass the has() check above before
+    // either reaches the add(). Same pattern as paymentTxId above.
+    usedRevealTxIds.add(revealTxId);
+    usedTxTimestamps.set(revealTxId, Date.now());
+    claimedRevealTxId = revealTxId;
+
     // Verify the on-chain reveal and read the ABI return value
     const revealInfo = await verifyRevealTransaction(
       revealTxId,
@@ -292,15 +306,16 @@ export async function POST(request: NextRequest) {
         usedPaymentTxIds.delete(claimedTxId);
         usedTxTimestamps.delete(claimedTxId);
       }
+      if (claimedRevealTxId) {
+        usedRevealTxIds.delete(claimedRevealTxId);
+        usedTxTimestamps.delete(claimedRevealTxId);
+      }
       return NextResponse.json(
         { error: "Prize configuration incomplete — no prizes configured." },
         { status: 500 }
       );
     }
 
-    // Mark the reveal as used before distribution to prevent replay
-    usedRevealTxIds.add(revealTxId);
-    usedTxTimestamps.set(revealTxId, Date.now());
     distributionAttempted = true;
 
     let distributionTxId: string;
@@ -346,12 +361,18 @@ export async function POST(request: NextRequest) {
       status: "success",
     });
   } catch (err: unknown) {
-    // Only release the payment txId for pre-distribution validation errors
+    // Only release claimed txIds for pre-distribution validation errors
     // so the user can retry. Once distribution was attempted, do NOT release
     // — the on-chain tx may still confirm, and releasing enables double-dist.
-    if (claimedTxId && !distributionAttempted) {
-      usedPaymentTxIds.delete(claimedTxId);
-      usedTxTimestamps.delete(claimedTxId);
+    if (!distributionAttempted) {
+      if (claimedTxId) {
+        usedPaymentTxIds.delete(claimedTxId);
+        usedTxTimestamps.delete(claimedTxId);
+      }
+      if (claimedRevealTxId) {
+        usedRevealTxIds.delete(claimedRevealTxId);
+        usedTxTimestamps.delete(claimedRevealTxId);
+      }
     }
     console.error("[lootbox/reveal]", err);
     return NextResponse.json(
@@ -430,10 +451,12 @@ async function verifyPayment(
         };
       }
 
+      // 10-minute window: the normal flow (commit → 9 rounds → reveal → server)
+      // takes ~60s, but crash-recovery retries can resubmit minutes later.
       const roundTime = txn["round-time"];
       if (roundTime != null && roundTime > 0) {
         const txAge = Math.floor(Date.now() / 1000) - roundTime;
-        if (txAge > 300) {
+        if (txAge > MAX_PAYMENT_AGE_SECONDS) {
           return { ok: false, reason: "Transaction is too old. Please submit a new payment." };
         }
       }
@@ -508,11 +531,21 @@ async function verifyRevealTransaction(
         throw new Error("Reveal sender does not match wallet.");
       }
 
+      const onCompletion = appCallDetails["on-completion"];
+      if (onCompletion !== "noop" && onCompletion !== undefined) {
+        throw new Error("Reveal transaction has unexpected on-completion type.");
+      }
+
+      const appArgs = appCallDetails["application-args"] as string[] | undefined;
+      if (!appArgs || appArgs.length === 0 || appArgs[0] !== REVEAL_SELECTOR_B64) {
+        throw new Error("Reveal transaction does not call the reveal() method.");
+      }
+
       const roundTime = txn["round-time"];
       if (roundTime != null && roundTime > 0) {
         const txAge = Math.floor(Date.now() / 1000) - roundTime;
-        if (txAge > 300) {
-          throw new Error("Transaction is too old. Please submit a new payment.");
+        if (txAge > MAX_REVEAL_AGE_SECONDS) {
+          throw new Error("Reveal transaction is too old. Please try again.");
         }
       }
 
