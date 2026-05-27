@@ -33,6 +33,8 @@ Algorand only retains block headers for approximately 1000 rounds. If a user com
 
 Each commit creates a BoxMap entry (32-byte address key + 8-byte uint64 value). The minimum balance requirement (MBR) for each box is approximately 18,500 microALGO (2,500 base + 400 * 40 bytes). The contract account must be funded with enough ALGO to cover MBR for the maximum number of concurrent commits expected. When a commit is deleted (via `reveal()` or `reclaim()`), the associated MBR is freed.
 
+**Important:** Set the crate price to at least 18,500 microALGO (0.0185 ALGO) to prevent MBR exhaustion attacks. If the crate price is lower than the per-box MBR cost, an attacker can consume more MBR than the treasury earns per commit, potentially blocking legitimate users.
+
 ### Multiple Random Values
 
 If you need multiple random values from a single seed (e.g. rolling several dice in one transaction), use [lib-pcg-avm](https://github.com/CiottiGiorgio/lib-pcg-avm) by Giorgio Ciotti — an open-source PCG implementation for the Algorand Virtual Machine.

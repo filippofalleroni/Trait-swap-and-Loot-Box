@@ -87,6 +87,7 @@ export default function LootboxStudio() {
   const [error, setError] = useState<string | null>(null);
   const [showPrizes, setShowPrizes] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [playAgainFlag, setPlayAgainFlag] = useState(false);
   const [cratesOpened, setCratesOpened] = useState(0);
   const [buyerBalance, setBuyerBalance] = useState<number | null>(null);
   const [vrfProgress, setVrfProgress] = useState("");
@@ -125,7 +126,7 @@ export default function LootboxStudio() {
 
   useEffect(() => {
     fetch("/api/lootbox/prizes")
-      .then((r) => r.json())
+      .then(function (r) { if (!r.ok) throw new Error("fetch failed"); return r.json(); })
       .then((data) => {
         if (data.prizes) setPrizes(data.prizes);
         setPrizesLoaded(true);
@@ -257,11 +258,23 @@ export default function LootboxStudio() {
         // server included prize info, otherwise show a clear message.
         if (res.status === 409) {
           setPendingReveal(null);
-          setState("idle");
-          setShowModal(false);
-          return;
+          throw new Error("This loot box was already claimed. Check your wallet for the prize.");
         }
-        throw new Error((errData as Record<string, string>).error || `Reveal failed (${res.status})`);
+        const errObj = errData as Record<string, unknown>;
+        const serverError = (errObj.error as string) || `Reveal failed (${res.status})`;
+        // If the server says the transaction is too old, the commit is
+        // irrecoverable — clear pendingReveal so the green "your payment
+        // went through" reassurance box doesn't mislead the user.
+        if (serverError.toLowerCase().includes("too old")) {
+          setPendingReveal(null);
+        }
+        // If distribution failed, the server includes the prize info so
+        // the user (and support) knows what was won.
+        const prize = errObj.prize as Record<string, string> | undefined;
+        if (prize?.name) {
+          throw new Error(`${serverError} (Prize: ${prize.name})`);
+        }
+        throw new Error(serverError);
       }
 
       const data: RevealResult = await res.json();
@@ -289,6 +302,7 @@ export default function LootboxStudio() {
 
     setError(null);
     setResult(null);
+    setVrfProgress("");
     setState("committing");
     setShowModal(true);
 
@@ -320,6 +334,19 @@ export default function LootboxStudio() {
           pendingReveal.revealTxId
         );
         return;
+      }
+
+      // commitRound 0 means the payment was submitted but never confirmed
+      // (browser crashed between sendRawTransaction and waitForConfirmation).
+      // Clear the stale record so the user isn't stuck, and show a message
+      // pointing them to their wallet history.
+      if (retrying && pendingReveal.commitRound === 0) {
+        setPendingReveal(null);
+        throw new Error(
+          "A previous payment may have been submitted but was not confirmed. " +
+          "Check your wallet transaction history. If the payment went through, " +
+          "please contact support."
+        );
       }
 
       // If we have a commit but no reveal yet, skip to VRF wait + reveal
@@ -459,6 +486,18 @@ export default function LootboxStudio() {
         offset,
         offset + paymentTxns.length
       );
+      const paymentTxId = commitData.txIds[0] as string;
+
+      // Save a preliminary recovery record BEFORE submitting so that if the
+      // browser crashes between sendRawTransaction and waitForConfirmation
+      // the user's payment is not silently lost. commitRound 0 signals
+      // "submitted but not yet confirmed" to the recovery path.
+      setPendingReveal({
+        walletAddress,
+        paymentTxId,
+        commitRound: 0,
+      });
+
       const { txid: commitTxid } = await algodClient
         .sendRawTransaction(commitSigned)
         .do();
@@ -469,10 +508,9 @@ export default function LootboxStudio() {
       )) as unknown as Record<string, unknown>;
 
       commitSubmitted = true;
-      const paymentTxId = commitData.txIds[0] as string;
-      const commitRound = Number(confirmResult["confirmed-round"] ?? 0);
+      const commitRound = Number(confirmResult["confirmedRound"] ?? confirmResult["confirmed-round"] ?? 0);
 
-      // Save pending state for crash recovery
+      // Update with the real commit round now that it's confirmed
       const pending: PendingReveal = {
         walletAddress,
         paymentTxId,
@@ -500,11 +538,14 @@ export default function LootboxStudio() {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Something went wrong";
 
-      if (
-        msg.toLowerCase().includes("user rejected") ||
-        msg.toLowerCase().includes("cancelled") ||
-        msg.toLowerCase().includes("canceled")
-      ) {
+      const isUserRejection =
+        /cancel/i.test(msg) ||
+        /reject/i.test(msg) ||
+        /denied/i.test(msg) ||
+        /abort/i.test(msg) ||
+        /user.*close/i.test(msg);
+
+      if (isUserRejection) {
         // Only clear pendingReveal if the commit hasn't been submitted yet.
         // If the user cancels the reveal signing after paying, they need
         // pendingReveal to retry and claim their prize.
@@ -528,7 +569,7 @@ export default function LootboxStudio() {
   /* ---------------------------------------------------------------- */
 
   const handleRetry = useCallback(() => {
-    if (pendingReveal && walletAddress) {
+    if (pendingReveal && walletAddress && pendingReveal.walletAddress === walletAddress) {
       setError(null);
       setResult(null);
       handleOpenLootBox();
@@ -553,6 +594,15 @@ export default function LootboxStudio() {
     setResult(null);
     setError(null);
   }, [state]);
+
+  // "Play Again" fires after closeModal settles state to idle + pendingReveal=null.
+  // Using a flag avoids a stale closure capturing the old pendingReveal.
+  useEffect(() => {
+    if (playAgainFlag && state === "idle" && !pendingReveal) {
+      setPlayAgainFlag(false);
+      handleOpenLootBox();
+    }
+  }, [playAgainFlag, state, pendingReveal, handleOpenLootBox]);
 
   /* ---------------------------------------------------------------- */
   /*  Render                                                          */
@@ -649,7 +699,7 @@ export default function LootboxStudio() {
                 ? "Connect Wallet"
                 : isProcessing
                 ? "Processing..."
-                : pendingReveal
+                : pendingReveal && pendingReveal.walletAddress === walletAddress
                 ? "Retry Loot Box"
                 : !prizesLoaded
                 ? "Loading..."
@@ -902,7 +952,7 @@ export default function LootboxStudio() {
                   <button
                     onClick={() => {
                       closeModal();
-                      setTimeout(() => handleOpenLootBox(), 300);
+                      setPlayAgainFlag(true);
                     }}
                     className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 transition-colors"
                   >
@@ -921,7 +971,7 @@ export default function LootboxStudio() {
                 <p className="text-sm text-red-400">
                   {error || "Something went wrong"}
                 </p>
-                {pendingReveal && (
+                {pendingReveal && pendingReveal.walletAddress === walletAddress && (
                   <div className="w-full rounded-lg border border-emerald-900/30 bg-emerald-950/20 px-4 py-2.5">
                     <p className="text-xs text-emerald-400/80">
                       Your payment went through. Tap Retry to claim your
@@ -940,7 +990,7 @@ export default function LootboxStudio() {
                     onClick={handleRetry}
                     className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-500 transition-colors"
                   >
-                    {pendingReveal ? "Retry" : "Try Again"}
+                    {pendingReveal && pendingReveal.walletAddress === walletAddress ? "Retry" : "Try Again"}
                   </button>
                 </div>
               </div>

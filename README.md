@@ -99,7 +99,7 @@ Copy `.env.example` to `.env.local` and configure:
 
 | Variable | Description | Default |
 |---|---|---|
-| `ADMIN_WALLETS` | Comma-separated Algorand wallet addresses that can access the admin panel. Overrides the hardcoded list in `config/admin.ts` when set. | *(empty)* |
+| `NEXT_PUBLIC_ADMIN_WALLETS` | Comma-separated Algorand wallet addresses that can access the admin panel. Overrides the hardcoded list in `config/admin.ts` when set. Requires the `NEXT_PUBLIC_` prefix because the admin gate runs client-side. | *(empty)* |
 
 ### Optional
 

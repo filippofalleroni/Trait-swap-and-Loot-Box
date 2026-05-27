@@ -71,11 +71,15 @@ export function resolvePrize(
 export function getPrizeOdds(
   prizes: PrizeTier[]
 ): Array<PrizeTier & { chance: number }> {
-  const totalWeight = prizes.reduce(function (sum, p) {
+  const validPrizes = prizes.filter(function (p) {
+    return p.weight > 0;
+  });
+
+  const totalWeight = validPrizes.reduce(function (sum, p) {
     return sum + p.weight;
   }, 0);
 
-  return prizes.map(function (prize) {
+  return validPrizes.map(function (prize) {
     return {
       ...prize,
       chance:

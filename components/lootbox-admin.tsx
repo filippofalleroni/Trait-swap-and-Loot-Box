@@ -72,20 +72,28 @@ export default function LootboxAdmin() {
   const [optInAssetId, setOptInAssetId] = useState("");
   const [optInLoading, setOptInLoading] = useState(false);
   const [optInMessage, setOptInMessage] = useState<string | null>(null);
+  const [optInIsError, setOptInIsError] = useState(false);
 
   // Status message
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const [statusIsError, setStatusIsError] = useState(false);
 
   // Revenue auto-refresh interval ref
   const revenueIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
     null
   );
 
+  // Ref guards to prevent concurrent async operations
+  const authenticatingRef = useRef(false);
+  const savingRef = useRef(false);
+  const optInRef = useRef(false);
+
   // ---------------------------------------------------------------------------
   // Authentication: challenge -> sign -> session
   // ---------------------------------------------------------------------------
   const authenticate = useCallback(async () => {
-    if (!walletAddress) return;
+    if (!walletAddress || authenticatingRef.current) return;
+    authenticatingRef.current = true;
     setAuthLoading(true);
     setAuthError(null);
 
@@ -120,16 +128,36 @@ export default function LootboxAdmin() {
       setAuthError(message);
     } finally {
       setAuthLoading(false);
+      authenticatingRef.current = false;
     }
   }, [walletAddress, signTransactions]);
 
-  // Auto-authenticate on mount if wallet is connected.
+  // Reset auth when wallet changes.
+  const prevWalletRef = useRef(walletAddress);
+  useEffect(() => {
+    if (prevWalletRef.current !== walletAddress) {
+      prevWalletRef.current = walletAddress;
+      setAuthenticated(false);
+    }
+  }, [walletAddress]);
+
+  // Auto-authenticate when wallet is connected and not yet authenticated.
   useEffect(() => {
     if (walletAddress && !authenticated && !authLoading) {
       authenticate();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [walletAddress]);
+  }, [walletAddress, authenticated]);
+
+  function isSessionExpiredError(err: unknown): boolean {
+    if (!(err instanceof Error)) return false;
+    const msg = err.message.toLowerCase();
+    return (
+      msg.includes("no active session") ||
+      msg.includes("please authenticate") ||
+      msg.includes("unauthorized")
+    );
+  }
 
   // ---------------------------------------------------------------------------
   // Load data once authenticated
@@ -139,8 +167,10 @@ export default function LootboxAdmin() {
     try {
       const { prizes: loaded } = await adminGetPrizes(walletAddress);
       setPrizes(loaded);
-    } catch {
+    } catch (err) {
+      if (isSessionExpiredError(err)) { setAuthenticated(false); return; }
       setStatusMsg("Failed to load prizes.");
+      setStatusIsError(true);
     }
   }, [walletAddress]);
 
@@ -149,8 +179,8 @@ export default function LootboxAdmin() {
     try {
       const data = await adminGetRevenue(walletAddress);
       setRevenue(data);
-    } catch {
-      // Silently fail for auto-refresh.
+    } catch (err) {
+      if (isSessionExpiredError(err)) { setAuthenticated(false); return; }
     }
   }, [walletAddress]);
 
@@ -159,8 +189,8 @@ export default function LootboxAdmin() {
     try {
       const { nfts: loaded } = await adminGetBuyerNfts(walletAddress);
       setNfts(loaded);
-    } catch {
-      // Silently fail.
+    } catch (err) {
+      if (isSessionExpiredError(err)) { setAuthenticated(false); return; }
     }
   }, [walletAddress]);
 
@@ -195,6 +225,7 @@ export default function LootboxAdmin() {
   }
 
   function startEdit(index: number) {
+    if (index < 0 || index >= prizes.length) return;
     setEditingIndex(index);
     setEditForm({ ...prizes[index] });
   }
@@ -228,7 +259,11 @@ export default function LootboxAdmin() {
     const prizeName = prizes[index]?.name || "this prize";
     if (!confirm(`Remove "${prizeName}" from the prize table?`)) return;
     setPrizes(prizes.filter((_, i) => i !== index));
-    if (editingIndex === index) cancelEdit();
+    if (editingIndex === index) {
+      cancelEdit();
+    } else if (editingIndex !== null && index < editingIndex) {
+      setEditingIndex(editingIndex - 1);
+    }
   }
 
   function duplicatePrize(index: number) {
@@ -254,16 +289,23 @@ export default function LootboxAdmin() {
   // Save prizes
   // ---------------------------------------------------------------------------
   async function handleSave() {
-    if (!walletAddress) return;
+    if (!walletAddress || savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     setStatusMsg(null);
+    setStatusIsError(false);
     try {
       const { count } = await adminSavePrizes(walletAddress, prizes);
       setStatusMsg(`Saved ${count} prizes successfully.`);
-    } catch {
-      setStatusMsg("Failed to save prizes.");
+      setStatusIsError(false);
+    } catch (err: unknown) {
+      if (isSessionExpiredError(err)) { setAuthenticated(false); return; }
+      const msg = err instanceof Error ? err.message : "Failed to save prizes.";
+      setStatusMsg(msg);
+      setStatusIsError(true);
     } finally {
       setSaving(false);
+      savingRef.current = false;
     }
   }
 
@@ -271,22 +313,31 @@ export default function LootboxAdmin() {
   // Opt-in
   // ---------------------------------------------------------------------------
   async function handleOptIn() {
-    if (!walletAddress || !optInAssetId) return;
+    if (!walletAddress || !optInAssetId || optInRef.current) return;
+    const parsed = parseInt(optInAssetId, 10);
+    if (isNaN(parsed) || parsed <= 0) {
+      setOptInMessage("Please enter a valid positive asset ID.");
+      setOptInIsError(true);
+      return;
+    }
+    optInRef.current = true;
     setOptInLoading(true);
     setOptInMessage(null);
+    setOptInIsError(false);
     try {
-      const { message } = await adminOptIn(
-        walletAddress,
-        parseInt(optInAssetId, 10)
-      );
+      const { message } = await adminOptIn(walletAddress, parsed);
       setOptInMessage(message);
+      setOptInIsError(false);
       setOptInAssetId("");
     } catch (err: unknown) {
+      if (isSessionExpiredError(err)) { setAuthenticated(false); return; }
       const message =
         err instanceof Error ? err.message : "Opt-in failed.";
       setOptInMessage(message);
+      setOptInIsError(true);
     } finally {
       setOptInLoading(false);
+      optInRef.current = false;
     }
   }
 
@@ -390,7 +441,9 @@ export default function LootboxAdmin() {
           </button>
         </div>
         {optInMessage && (
-          <p className="mt-3 text-sm text-zinc-300">{optInMessage}</p>
+          <p className={`mt-3 text-sm ${optInIsError ? "text-red-400" : "text-emerald-400"}`}>
+            {optInMessage}
+          </p>
         )}
       </section>
 
@@ -420,7 +473,9 @@ export default function LootboxAdmin() {
         </div>
 
         {statusMsg && (
-          <p className="mt-3 text-sm text-zinc-300">{statusMsg}</p>
+          <p className={`mt-3 text-sm ${statusIsError ? "text-red-400" : "text-emerald-400"}`}>
+            {statusMsg}
+          </p>
         )}
 
         {/* Prize table */}
@@ -542,6 +597,7 @@ export default function LootboxAdmin() {
                 <input
                   type="text"
                   value={editForm.name}
+                  maxLength={200}
                   onChange={(e) =>
                     setEditForm({ ...editForm, name: e.target.value })
                   }
@@ -580,9 +636,10 @@ export default function LootboxAdmin() {
                   onChange={(e) =>
                     setEditForm({
                       ...editForm,
-                      assetId: parseInt(e.target.value, 10) || 0,
+                      assetId: Math.max(0, parseInt(e.target.value, 10) || 0),
                     })
                   }
+                  min={0}
                   className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 focus:border-indigo-500 focus:outline-none"
                 />
               </div>
@@ -598,9 +655,10 @@ export default function LootboxAdmin() {
                   onChange={(e) =>
                     setEditForm({
                       ...editForm,
-                      amount: parseInt(e.target.value, 10) || 0,
+                      amount: Math.max(0, parseInt(e.target.value, 10) || 0),
                     })
                   }
+                  min={1}
                   className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 focus:border-indigo-500 focus:outline-none"
                 />
               </div>
@@ -616,9 +674,10 @@ export default function LootboxAdmin() {
                   onChange={(e) =>
                     setEditForm({
                       ...editForm,
-                      weight: parseInt(e.target.value, 10) || 1,
+                      weight: Math.max(1, parseInt(e.target.value, 10) || 1),
                     })
                   }
+                  min={1}
                   className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 focus:border-indigo-500 focus:outline-none"
                 />
               </div>

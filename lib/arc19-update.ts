@@ -108,7 +108,7 @@ export async function prepareArc19UpdateTransaction({
     throw new Error(`Asset ${assetId} has no manager address set.`);
   }
 
-  if (currentManager !== managerAddress) {
+  if (currentManager.toLowerCase() !== managerAddress.toLowerCase()) {
     throw new Error(
       `Configured manager ${managerAddress} does not match asset manager ${currentManager} for asset ${assetId}.`
     );
@@ -246,7 +246,7 @@ export async function updateArc19Metadata({
   if (!currentManager) {
     throw new Error(`Asset ${assetId} has no manager address set.`);
   }
-  if (currentManager !== managerAccount.addr.toString()) {
+  if (currentManager.toLowerCase() !== managerAccount.addr.toString().toLowerCase()) {
     throw new Error(
       `Configured manager does not match asset manager ${currentManager} for asset ${assetId}.`
     );

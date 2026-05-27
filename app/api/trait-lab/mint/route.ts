@@ -89,13 +89,14 @@ function pruneUsedMintTxIds() {
 
 export async function POST(request: NextRequest) {
   let claimedTxId: string | null = null;
+  let ipfsUploaded = false;
 
   try {
     // IP-based rate limit (harder to spoof than wallet address)
     const clientIp = getClientIp(request);
     if (isIpRateLimited(clientIp)) {
       return NextResponse.json(
-        { error: "Too many attempts. Please wait a minute." },
+        { error: "Too many requests. Please wait a minute." },
         { status: 429 }
       );
     }
@@ -124,7 +125,7 @@ export async function POST(request: NextRequest) {
 
     if (isRateLimited(walletAddress)) {
       return NextResponse.json(
-        { error: "Too many attempts. Please wait a minute." },
+        { error: "Too many requests. Please wait a minute." },
         { status: 429 }
       );
     }
@@ -199,8 +200,9 @@ export async function POST(request: NextRequest) {
     if (!paymentValid.ok) {
       usedMintTxIds.delete(paymentTxId);
       usedMintTxTimestamps.delete(paymentTxId);
+      console.error("[trait-lab/mint] Payment verification failed:", paymentValid.reason);
       return NextResponse.json(
-        { error: `Payment verification failed: ${paymentValid.reason}` },
+        { error: "Payment verification failed." },
         { status: 400 }
       );
     }
@@ -238,6 +240,17 @@ export async function POST(request: NextRequest) {
 
     const isLive = process.env.ARC19_LIVE_UPDATES_ENABLED === "true";
 
+    if (isLive) {
+      const creatorAddr = process.env.COLLECTION_CREATOR_ADDRESS?.trim();
+      if (!creatorAddr || creatorAddr === "YOUR_COLLECTION_CREATOR_ADDRESS") {
+        console.error("[trait-lab/mint] ARC19_LIVE_UPDATES_ENABLED is true but COLLECTION_CREATOR_ADDRESS is not configured.");
+        return NextResponse.json(
+          { error: "Server configuration error. Please contact the administrator." },
+          { status: 500 }
+        );
+      }
+    }
+
     if (!isLive) {
       return NextResponse.json({
         status: "prepared" as const,
@@ -262,8 +275,6 @@ export async function POST(request: NextRequest) {
       const currentMetadata = await fetchCurrentMetadata(nftAssetId);
 
       if (!currentMetadata) {
-        // Transient infrastructure failure (indexer/IPFS down).
-        // Release the txId so the user can retry with the same valid payment.
         usedMintTxIds.delete(paymentTxId);
         usedMintTxTimestamps.delete(paymentTxId);
         return NextResponse.json(
@@ -293,6 +304,7 @@ export async function POST(request: NextRequest) {
       };
 
       const newCid = await uploadJsonToIpfs(newMetadata as unknown as Record<string, unknown>);
+      ipfsUploaded = true;
       const newReserveAddress = computeArc19ReserveAddress(newCid);
 
       const managerAccount = getManagerAccount();
@@ -312,8 +324,10 @@ export async function POST(request: NextRequest) {
       activeUpdates.delete(nftAssetId);
     }
   } catch (err) {
-    // Release the in-memory claim so the user can retry with the same payment tx.
-    if (claimedTxId) {
+    // Only release the txId if we haven't started writing (IPFS upload).
+    // After IPFS upload, the on-chain update may have partially applied,
+    // so the txId must stay claimed to prevent double-spending.
+    if (claimedTxId && !ipfsUploaded) {
       usedMintTxIds.delete(claimedTxId);
       usedMintTxTimestamps.delete(claimedTxId);
     }
@@ -385,18 +399,24 @@ async function verifyPayment({
         return { ok: false, reason: "Transaction contains a close-remainder-to field and is rejected" };
       }
 
-      const expectedMicroAlgo = expectedAmountAlgo * 1_000_000;
+      // Reject payments that are part of an atomic group (e.g. lootbox commit groups).
+      // Trait swap payments are standalone transactions.
+      if (txn.group) {
+        return { ok: false, reason: "Payment must not be part of an atomic group" };
+      }
+
+      const expectedMicroAlgo = Math.round(expectedAmountAlgo * 1_000_000);
       if (paymentDetails.amount < expectedMicroAlgo) {
         return { ok: false, reason: "Insufficient payment amount" };
       }
 
-      // Reject transactions older than 5 minutes to limit replay window
       const roundTime = txn["round-time"];
-      if (roundTime != null && roundTime > 0) {
-        const txAge = Math.floor(Date.now() / 1000) - roundTime;
-        if (txAge > 300) {
-          return { ok: false, reason: "Transaction is too old. Please submit a new payment" };
-        }
+      if (!roundTime || roundTime <= 0) {
+        return { ok: false, reason: "Transaction missing round time" };
+      }
+      const txAge = Math.floor(Date.now() / 1000) - roundTime;
+      if (txAge > 300) {
+        return { ok: false, reason: "Transaction is too old. Please submit a new payment" };
       }
 
       return { ok: true };
@@ -490,6 +510,7 @@ async function fetchCurrentMetadata(
 
     const metaRes = await fetch(metadataUrl, {
       signal: AbortSignal.timeout(5000),
+      redirect: "error",
     });
 
     if (!metaRes.ok) return null;

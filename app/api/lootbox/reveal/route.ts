@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
     const clientIp = getClientIp(request);
     if (isIpRateLimited(clientIp)) {
       return NextResponse.json(
-        { error: "Too many attempts. Please wait a minute." },
+        { error: "Too many requests. Please wait a minute." },
         { status: 429 }
       );
     }
@@ -155,9 +155,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (isRateLimited(walletAddress)) {
+    if (isRateLimited(walletAddress.toUpperCase())) {
       return NextResponse.json(
-        { error: "Too many attempts. Please wait a minute." },
+        { error: "Too many requests. Please wait a minute." },
         { status: 429 }
       );
     }
@@ -252,8 +252,14 @@ export async function POST(request: NextRequest) {
       throw new Error("Payment must be part of a commit transaction group.");
     }
 
-    // In live mode, the user must also submit an on-chain reveal() call
+    // In live mode, the user must also submit an on-chain reveal() call.
+    // Release the claimed paymentTxId on validation errors so the user can
+    // retry with a corrected revealTxId.
     if (!revealTxId) {
+      if (claimedTxId) {
+        usedPaymentTxIds.delete(claimedTxId);
+        usedTxTimestamps.delete(claimedTxId);
+      }
       return NextResponse.json(
         { error: "A reveal transaction ID is required." },
         { status: 400 }
@@ -261,6 +267,10 @@ export async function POST(request: NextRequest) {
     }
 
     if (!ALGO_TXID_REGEX.test(revealTxId)) {
+      if (claimedTxId) {
+        usedPaymentTxIds.delete(claimedTxId);
+        usedTxTimestamps.delete(claimedTxId);
+      }
       return NextResponse.json(
         { error: "Invalid transaction ID format." },
         { status: 400 }
@@ -268,6 +278,10 @@ export async function POST(request: NextRequest) {
     }
 
     if (usedRevealTxIds.has(revealTxId)) {
+      if (claimedTxId) {
+        usedPaymentTxIds.delete(claimedTxId);
+        usedTxTimestamps.delete(claimedTxId);
+      }
       return NextResponse.json(
         { error: "This transaction has already been used." },
         { status: 409 }
@@ -392,8 +406,8 @@ async function verifyPayment(
   expectedReceiver: string,
   expectedAmountMicroAlgo: number
 ): Promise<{ ok: boolean; reason?: string; group?: string }> {
-  const MAX_RETRIES = 20;
-  const RETRY_DELAY_MS = 3000;
+  const MAX_RETRIES = 12;
+  const RETRY_DELAY_MS = 2000;
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
@@ -454,11 +468,12 @@ async function verifyPayment(
       // 10-minute window: the normal flow (commit → 9 rounds → reveal → server)
       // takes ~60s, but crash-recovery retries can resubmit minutes later.
       const roundTime = txn["round-time"];
-      if (roundTime != null && roundTime > 0) {
-        const txAge = Math.floor(Date.now() / 1000) - roundTime;
-        if (txAge > MAX_PAYMENT_AGE_SECONDS) {
-          return { ok: false, reason: "Transaction is too old. Please submit a new payment." };
-        }
+      if (!roundTime || roundTime <= 0) {
+        return { ok: false, reason: "Transaction missing round time" };
+      }
+      const txAge = Math.floor(Date.now() / 1000) - roundTime;
+      if (txAge > MAX_PAYMENT_AGE_SECONDS) {
+        return { ok: false, reason: "Transaction is too old. Please submit a new payment." };
       }
 
       const group = typeof txn.group === "string" ? txn.group : undefined;
@@ -488,8 +503,8 @@ async function verifyRevealTransaction(
   expectedSender: string,
   expectedAppId: number
 ): Promise<{ returnValue: bigint }> {
-  const MAX_RETRIES = 20;
-  const RETRY_DELAY_MS = 3000;
+  const MAX_RETRIES = 10;
+  const RETRY_DELAY_MS = 2000;
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
@@ -542,11 +557,12 @@ async function verifyRevealTransaction(
       }
 
       const roundTime = txn["round-time"];
-      if (roundTime != null && roundTime > 0) {
-        const txAge = Math.floor(Date.now() / 1000) - roundTime;
-        if (txAge > MAX_REVEAL_AGE_SECONDS) {
-          throw new Error("Reveal transaction is too old. Please try again.");
-        }
+      if (!roundTime || roundTime <= 0) {
+        throw new Error("Reveal transaction missing round time.");
+      }
+      const txAge = Math.floor(Date.now() / 1000) - roundTime;
+      if (txAge > MAX_REVEAL_AGE_SECONDS) {
+        throw new Error("Reveal transaction is too old. Please try again.");
       }
 
       const logs = txn.logs as string[] | undefined;

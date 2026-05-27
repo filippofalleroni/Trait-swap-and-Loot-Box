@@ -264,8 +264,8 @@ export async function adminSavePrizes(
     if (typeof p.assetId !== "number" || p.assetId < 0 || !Number.isFinite(p.assetId)) {
       throw new Error("Invalid prize assetId.");
     }
-    if (typeof p.amount !== "number" || p.amount < 0 || !Number.isFinite(p.amount)) {
-      throw new Error("Invalid prize amount.");
+    if (typeof p.amount !== "number" || p.amount <= 0 || !Number.isFinite(p.amount)) {
+      throw new Error("Invalid prize amount. Must be greater than zero.");
     }
     if (typeof p.weight !== "number" || p.weight <= 0 || !Number.isFinite(p.weight)) {
       throw new Error("Prize weight must be a positive number.");
@@ -277,9 +277,33 @@ export async function adminSavePrizes(
     ) {
       throw new Error("Invalid prize color. Must be a CSS hex color (e.g. #ff0000).");
     }
+    if (p.imageUrl !== undefined) {
+      if (typeof p.imageUrl !== "string" || p.imageUrl.length > 500) {
+        throw new Error("Invalid prize imageUrl.");
+      }
+      if (p.imageUrl && !/^https:\/\//.test(p.imageUrl)) {
+        throw new Error("Prize imageUrl must be an https URL.");
+      }
+    }
   }
 
-  const payload = JSON.stringify(prizes, null, 2);
+  // Strip to known fields to prevent persisting unexpected properties.
+  const sanitized = prizes.map(function (p) {
+    const clean: PrizeTier = {
+      id: p.id,
+      name: p.name,
+      type: p.type,
+      assetId: p.assetId,
+      amount: p.amount,
+      weight: p.weight,
+      rarity: p.rarity,
+      color: p.color,
+    };
+    if (p.imageUrl) clean.imageUrl = p.imageUrl;
+    return clean;
+  });
+
+  const payload = JSON.stringify(sanitized, null, 2);
 
   if (process.env.BLOB_READ_WRITE_TOKEN) {
     try {
@@ -406,10 +430,27 @@ export async function adminOptIn(
 
   const algod = getAlgodClient();
   const masterAccount = getLootboxMasterAccount();
+  const masterAddr = masterAccount.addr.toString();
+
+  // Pre-flight: check if already opted in and if balance supports MBR increase.
+  const masterInfo = await algod.accountInformation(masterAddr).do();
+  const assets = (masterInfo.assets ?? []) as unknown as Array<Record<string, unknown>>;
+  const alreadyOptedIn = assets.some(function (a) {
+    return Number(a["asset-id"] ?? a["assetId"] ?? 0) === assetId;
+  });
+  if (alreadyOptedIn) {
+    throw new Error("Master wallet is already opted into this asset.");
+  }
+  const currentBalance = Number(masterInfo.amount ?? 0);
+  const currentMbr = Number(masterInfo.minBalance ?? 0);
+  const mbrIncrease = 100_000; // 0.1 ALGO per ASA opt-in
+  if (currentBalance < currentMbr + mbrIncrease + 100_000) {
+    throw new Error("Insufficient balance: opt-in would exceed minimum balance requirement.");
+  }
+
   const params = await algod.getTransactionParams().do();
 
   // Build a zero-amount asset transfer to self (opt-in).
-  const masterAddr = masterAccount.addr.toString();
   const txn = algosdk.makeAssetTransferTxnWithSuggestedParamsFromObject({
     sender: masterAddr,
     receiver: masterAddr,

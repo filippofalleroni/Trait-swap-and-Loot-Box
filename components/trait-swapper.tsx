@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import algosdk from "algosdk";
 import { useWallet } from "@/contexts/wallet-context";
 import { useToast } from "@/contexts/toast-context";
@@ -85,13 +85,24 @@ export default function TraitSwapper() {
   // ---- Trait counts (how many times each trait has been applied) ----
   const [traitCounts, setTraitCounts] = useState<Record<string, number>>({});
 
+  const mintingRef = useRef(false);
+
   // ---- Pending payment TX (stored in sessionStorage for crash recovery) ----
-  const [pendingPaymentTxId, setPendingPaymentTxId] = useState<string | null>(function initPending() {
-    if (typeof window === "undefined") return null;
+  const [pendingPaymentTxId, setPendingPaymentTxId] = useState<string | null>(null);
+  const [pendingPaymentWallet, setPendingPaymentWallet] = useState<string | null>(null);
+
+  // Restore pending payment from sessionStorage on mount
+  useEffect(() => {
     try {
-      return sessionStorage.getItem("traitswap_pending_tx") || null;
-    } catch { return null; }
-  });
+      const raw = sessionStorage.getItem("traitswap_pending_tx");
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { txId?: string; wallet?: string };
+      if (parsed.txId) {
+        setPendingPaymentTxId(parsed.txId);
+        setPendingPaymentWallet(parsed.wallet ?? null);
+      }
+    } catch { /* ignore */ }
+  }, []);
 
   /* ---------------------------------------------------------------- */
   /*  Load owned NFTs                                                 */
@@ -160,9 +171,9 @@ export default function TraitSwapper() {
 
   useEffect(() => {
     fetch("/api/trait-counts")
-      .then((r) => r.json())
-      .then((data) => setTraitCounts(data ?? {}))
-      .catch(() => {});
+      .then(function (r) { return r.ok ? r.json() : {}; })
+      .then(function (data) { setTraitCounts(data ?? {}); })
+      .catch(function () {});
   }, []);
 
   /* ---------------------------------------------------------------- */
@@ -172,12 +183,15 @@ export default function TraitSwapper() {
   useEffect(() => {
     try {
       if (pendingPaymentTxId) {
-        sessionStorage.setItem("traitswap_pending_tx", pendingPaymentTxId);
+        sessionStorage.setItem("traitswap_pending_tx", JSON.stringify({
+          txId: pendingPaymentTxId,
+          wallet: pendingPaymentWallet,
+        }));
       } else {
         sessionStorage.removeItem("traitswap_pending_tx");
       }
     } catch { /* sessionStorage unavailable */ }
-  }, [pendingPaymentTxId]);
+  }, [pendingPaymentTxId, pendingPaymentWallet]);
 
   /* ---------------------------------------------------------------- */
   /*  Derived values                                                  */
@@ -267,6 +281,8 @@ export default function TraitSwapper() {
 
   async function executeMint() {
     if (!walletAddress || !selectedNft) return;
+    if (mintingRef.current) return;
+    mintingRef.current = true;
 
     const traitId = selectedTrait?.id ?? "remove-" + activeCategory;
     const isRemoval = !selectedTrait;
@@ -313,6 +329,7 @@ export default function TraitSwapper() {
         .do();
       const paymentTxId: string = submitResult.txid;
       setPendingPaymentTxId(paymentTxId);
+      setPendingPaymentWallet(walletAddress);
       await algosdk.waitForConfirmation(algodClient, paymentTxId, 10);
       paymentConfirmed = true;
 
@@ -370,19 +387,37 @@ export default function TraitSwapper() {
       setMintResult(result.note ?? (isRemoval ? "Trait removed successfully." : "Trait applied successfully."));
       pushToast(isRemoval ? "Trait removed!" : "Trait applied!");
       setPendingPaymentTxId(null);
+      setPendingPaymentWallet(null);
 
       // Refresh trait counts so supply display stays accurate
       fetch("/api/trait-counts")
-        .then(function (r) { return r.json(); })
+        .then(function (r) { return r.ok ? r.json() : {}; })
         .then(function (data) { setTraitCounts(data ?? {}); })
         .catch(function () { /* ignore */ });
     } catch (err: unknown) {
-      setMintStep("error");
-      const message = err instanceof Error ? err.message : "Something went wrong";
-      setMintError(message);
-      if (!paymentConfirmed) {
-        pushToast("Error: " + message);
+      const rawMessage = err instanceof Error ? err.message : "Something went wrong";
+
+      const isUserRejection =
+        /cancel/i.test(rawMessage) ||
+        /reject/i.test(rawMessage) ||
+        /denied/i.test(rawMessage) ||
+        /abort/i.test(rawMessage) ||
+        /user.*close/i.test(rawMessage);
+
+      if (isUserRejection && !paymentConfirmed) {
+        setMintStep("idle");
+        setMintError(null);
+        pushToast("Transaction cancelled.");
+        return;
       }
+
+      setMintStep("error");
+      setMintError(rawMessage);
+      if (!paymentConfirmed) {
+        pushToast("Error: " + rawMessage);
+      }
+    } finally {
+      mintingRef.current = false;
     }
   }
 
@@ -394,6 +429,7 @@ export default function TraitSwapper() {
     setIsPreviewing(false);
     setPreviewingRemoval(false);
     setPendingPaymentTxId(null);
+    setPendingPaymentWallet(null);
   }
 
   /* ---------------------------------------------------------------- */
@@ -479,6 +515,27 @@ export default function TraitSwapper() {
             you&apos;re connected with the right wallet and own at least one NFT
             from this collection.
           </p>
+        </div>
+      )}
+
+      {/* Crash recovery: pending payment from a previous session */}
+      {pendingPaymentTxId && mintStep === "idle" && (!pendingPaymentWallet || pendingPaymentWallet === walletAddress) && (
+        <div className="mb-6 rounded-lg border border-yellow-600/40 bg-yellow-900/20 px-4 py-3">
+          <p className="text-sm font-semibold text-yellow-300">
+            You have a pending trait swap payment
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-yellow-200/80">
+            A previous payment was submitted but the trait swap may not have completed.
+            Please check your NFT before starting a new swap to avoid paying twice.
+          </p>
+          <div className="mt-2 flex gap-3">
+            <button
+              onClick={() => setPendingPaymentTxId(null)}
+              className="text-xs font-medium text-yellow-300 hover:text-yellow-100 transition-colors"
+            >
+              Dismiss
+            </button>
+          </div>
         </div>
       )}
 
@@ -867,7 +924,8 @@ export default function TraitSwapper() {
               </button>
               <button
                 onClick={executeMint}
-                className="flex-1 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-500 transition-colors"
+                disabled={mintStep !== "idle"}
+                className="flex-1 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 Confirm &amp; Sign
               </button>

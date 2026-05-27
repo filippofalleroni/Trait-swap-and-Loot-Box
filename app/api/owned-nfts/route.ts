@@ -162,6 +162,7 @@ export async function GET(request: NextRequest) {
             try {
               const metaRes = await fetch(metadataUrl, {
                 signal: AbortSignal.timeout(5000),
+                redirect: "error",
               });
               if (metaRes.ok) {
                 metadata = await metaRes.json();

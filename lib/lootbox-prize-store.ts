@@ -30,21 +30,18 @@ function validatePrizes(data: unknown[]): PrizeTier[] | null {
     if (typeof p.rarity !== "string" || !VALID_RARITIES.has(p.rarity)) return null;
     if (typeof p.color !== "string") return null;
     if (typeof p.assetId !== "number" || !Number.isFinite(p.assetId) || p.assetId < 0) return null;
-    if (typeof p.amount !== "number" || !Number.isFinite(p.amount) || p.amount < 0) return null;
+    if (typeof p.amount !== "number" || !Number.isFinite(p.amount) || p.amount <= 0) return null;
     if (typeof p.weight !== "number" || !Number.isFinite(p.weight) || p.weight <= 0) return null;
   }
   return data as PrizeTier[];
 }
 
-async function loadPrizesFromBlob(): Promise<PrizeTier[] | null> {
-  if (!BLOB_TOKEN || !BLOB_PRIZES_URL) return null;
-
+async function fetchAndValidate(url: string, headers?: Record<string, string>): Promise<PrizeTier[] | null> {
   try {
-    const res = await fetch(BLOB_PRIZES_URL, {
-      headers: { Authorization: `Bearer ${BLOB_TOKEN}` },
+    const res = await fetch(url, {
+      headers,
       next: { revalidate: 60 },
     });
-
     if (!res.ok) return null;
 
     const data = await res.json();
@@ -55,11 +52,36 @@ async function loadPrizesFromBlob(): Promise<PrizeTier[] | null> {
         : null;
 
     if (!arr) return null;
-
     return validatePrizes(arr);
   } catch {
     return null;
   }
+}
+
+async function loadPrizesFromBlob(): Promise<PrizeTier[] | null> {
+  if (!BLOB_TOKEN) return null;
+
+  // Primary path: use @vercel/blob list() to find the blob by name.
+  // This reads the same blob that adminSavePrizes writes to via put().
+  try {
+    const { list } = await import("@vercel/blob");
+    const blobs = await list({ prefix: "lootbox-prizes.json" });
+    if (blobs.blobs.length > 0) {
+      const result = await fetchAndValidate(blobs.blobs[0].url);
+      if (result) return result;
+    }
+  } catch {
+    // Fall through to direct URL fallback.
+  }
+
+  // Fallback: use explicit LOOTBOX_PRIZES_BLOB_URL if set.
+  if (BLOB_PRIZES_URL) {
+    return fetchAndValidate(BLOB_PRIZES_URL, {
+      Authorization: `Bearer ${BLOB_TOKEN}`,
+    });
+  }
+
+  return null;
 }
 
 /**

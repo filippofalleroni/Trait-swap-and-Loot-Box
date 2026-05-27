@@ -77,7 +77,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (isRateLimited(walletAddress)) {
+    if (isRateLimited(walletAddress.toUpperCase())) {
       return NextResponse.json(
         { error: "Too many requests. Please wait a minute." },
         { status: 429 }

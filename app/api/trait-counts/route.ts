@@ -60,5 +60,5 @@ export async function GET(request: NextRequest) {
   // const counts = await db.query("SELECT trait_id, count FROM trait_counts");
   // return NextResponse.json(Object.fromEntries(counts.map(r => [r.trait_id, r.count])));
 
-  return NextResponse.json({ counts: {}, note: "Trait counts require a database. See README." });
+  return NextResponse.json({});
 }

@@ -1,6 +1,6 @@
 // Admin wallet addresses — these wallets can access the admin panel.
 // Set via ADMIN_WALLETS env var (comma-separated) or hardcode here.
-const ENV_ADMIN_WALLETS = (process.env.ADMIN_WALLETS ?? "")
+const ENV_ADMIN_WALLETS = (process.env.NEXT_PUBLIC_ADMIN_WALLETS ?? "")
   .split(",")
   .map((a) => a.trim())
   .filter(Boolean);

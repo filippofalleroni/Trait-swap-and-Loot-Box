@@ -106,7 +106,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Convert ALGO to microALGO
-    const amountMicroAlgo = priceAlgo * 1_000_000;
+    const amountMicroAlgo = Math.round(priceAlgo * 1_000_000);
+    if (amountMicroAlgo <= 0) {
+      return NextResponse.json(
+        { error: "Invalid price configuration." },
+        { status: 500 }
+      );
+    }
     const treasuryAddress = getTreasuryAddress();
 
     // Build the unsigned payment transaction

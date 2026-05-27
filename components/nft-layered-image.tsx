@@ -35,10 +35,9 @@ export default function NftLayeredImage({
 }: NftLayeredImageProps) {
   const [layerAttemptIndex, setLayerAttemptIndex] = useState<Record<string, number>>({});
 
-  // Reset attempt indices when the NFT changes
   useEffect(() => {
     setLayerAttemptIndex({});
-  }, [nft]);
+  }, [nft, layerOverrides]);
 
   const hasLayers =
     nft.layerImageUrls && Object.keys(nft.layerImageUrls).length > 0;
@@ -109,8 +108,7 @@ export default function NftLayeredImage({
     });
 
     return function cleanup() {
-      images.forEach(function cancel(img) { img.src = ""; });
-      images.length = 0;
+      images.forEach(function cancel(img) { img.src = "data:,"; });
     };
   }, [layerUrls]);
 

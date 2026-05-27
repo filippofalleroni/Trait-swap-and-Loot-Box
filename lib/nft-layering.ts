@@ -30,11 +30,11 @@ export function isOfficialTraitCategory(
  * Removes path traversal sequences and unsafe characters.
  */
 function sanitizeTraitName(name: string): string {
-  let safe = name;
+  let safe = name.slice(0, 128);
   let prev: string;
   do {
     prev = safe;
-    safe = safe.replace(/\.\./g, "").replace(/[/\\:\0]/g, "");
+    safe = safe.replace(/\.\./g, "").replace(/[/\\:\0?#%]/g, "");
   } while (safe !== prev);
   return safe.trim();
 }

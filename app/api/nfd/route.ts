@@ -69,8 +69,8 @@ export async function GET(request: NextRequest) {
 
     if (!response.ok) {
       return NextResponse.json(
-        { error: `NFD lookup failed with status ${response.status}.` },
-        { status: response.status }
+        { error: "NFD lookup failed." },
+        { status: 502 }
       );
     }
 
