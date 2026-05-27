@@ -4,19 +4,36 @@ This directory contains the TEALScript source for the commit-reveal randomness c
 
 ## Overview
 
-The contract implements a commit-reveal pattern using the [Algorand Randomness Beacon](https://developer.algorand.org/docs/get-details/randomness-beacon/). The user commits (recording the current round), waits at least 8 rounds, then reveals to read the VRF seed from the block after their commit. The VRF seed is already cryptographically random, so we extract a `uint64` directly.
+The contract implements a commit-reveal pattern using the [Algorand Randomness Beacon](https://developer.algorand.org/docs/get-details/randomness-beacon/). It enforces payment, generates verifiable randomness, and returns the result on-chain — the server never touches the VRF seed directly.
+
+### Flow
+
+1. **Commit**: The user sends an atomic group containing a payment to the treasury (for at least the crate price) followed by an app call to `commit()`. The contract verifies the payment and records the current round.
+2. **Wait**: The user waits at least 9 rounds for the VRF seed to become available (the contract requires `globals.round > committed + 8`, i.e. strictly greater).
+3. **Reveal**: The user calls `reveal()` on-chain. The contract reads the VRF seed from `blocks[committed+1]`, extracts a random `uint64`, deletes the commit box, and returns the value via ABI return.
+4. **Distribute**: The server verifies the on-chain reveal transaction, reads the ABI return value from the transaction logs, and uses it to determine the prize.
+
+### Payment Enforcement
+
+The `commit()` method verifies that the preceding transaction in the atomic group is a payment to the treasury address for at least the configured crate price, from the same sender. This means:
+
+- The contract **enforces** that every commit is paid for — no one can call `commit()` without paying.
+- The treasury address and crate price are stored in global state and set at deployment via `createApplication()`.
+- Only the contract creator can update them via `configure()`.
 
 ### VRF Round Expiry
 
 Algorand only retains block headers for approximately 1000 rounds. If a user commits but doesn't reveal within that window, the VRF seed becomes inaccessible. The contract enforces a 900-round expiry (conservative buffer) and provides a `reclaim()` method so users can clean up expired commits and recommit.
 
+### Box Storage and MBR
+
+Each commit creates a BoxMap entry (32-byte address key + 8-byte uint64 value). The minimum balance requirement (MBR) for each box is approximately 18,500 microALGO (2,500 base + 400 * 40 bytes). The contract account must be funded with enough ALGO to cover MBR for the maximum number of concurrent commits expected. When a commit is deleted (via `reveal()` or `reclaim()`), the associated MBR is freed.
+
 ### Multiple Random Values
 
-If you need multiple random values from a single seed (e.g. rolling several dice in one transaction), use [lib-pcg-avm](https://github.com/CiottiGiorgio/lib-pcg-avm) by Giorgio Ciotti — an open-source PCG implementation for the Algorand Virtual Machine that handles overflow-safe multiplication and proper PRNG state management.
+If you need multiple random values from a single seed (e.g. rolling several dice in one transaction), use [lib-pcg-avm](https://github.com/CiottiGiorgio/lib-pcg-avm) by Giorgio Ciotti — an open-source PCG implementation for the Algorand Virtual Machine.
 
 ## Deploying Your Own
-
-You need to deploy your own instance of this contract before enabling live loot box mode.
 
 ### Prerequisites
 
@@ -30,20 +47,29 @@ You need to deploy your own instance of this contract before enabling live loot 
    npx tealscript contracts/lootbox-commit-reveal/contract.algo.ts contracts/lootbox-commit-reveal/artifacts
    ```
 
-2. Deploy using AlgoKit or `goal`:
-   ```bash
-   algokit deploy
-   ```
+2. Deploy using AlgoKit or `goal`. The `createApplication` call requires two arguments:
+   - `treasury` — the Algorand address that receives crate payments
+   - `price` — the crate price in microALGO (e.g. `10000000` for 10 ALGO)
 
-3. Set the deployed app ID in your `.env.local`:
+3. **Fund the contract account** with enough ALGO to cover box MBR for concurrent commits. For example, to support 100 concurrent commits:
+   ```
+   100 * 18,500 = 1,850,000 microALGO = 1.85 ALGO
+   ```
+   Plus the account minimum balance (100,000 microALGO).
+
+4. Set the deployed app ID in your `.env.local`:
    ```
    LOOTBOX_CONTRACT_APP_ID=<your-app-id>
    ```
 
-4. Enable live mode:
+5. Enable live mode:
    ```
    LOOTBOX_LIVE_ENABLED=true
    ```
+
+### Updating Configuration
+
+To change the treasury address or crate price after deployment, call `configure(treasury, price)` from the creator account.
 
 ### Testing Locally
 
@@ -59,10 +85,12 @@ Then deploy to LocalNet and run the loot box flow end-to-end.
 
 | Method | Description |
 |--------|-------------|
-| `commit()` | Records the current round for the caller. Can be called again to reset. |
-| `reveal()` | Reads the VRF seed from `blocks[committed+1]`, returns a random `uint64`, deletes the commit. Fails if called before 8 rounds or after 900 rounds. |
-| `reclaim()` | Deletes an expired commit (900+ rounds old) so the user can recommit. |
+| `createApplication(treasury, price)` | Deploy-time setup. Sets the treasury address and crate price in global state. |
+| `configure(treasury, price)` | Creator-only. Updates the treasury address and/or crate price. |
+| `commit()` | Verifies the preceding payment in the atomic group (correct receiver, amount, sender), then records the current round for the caller. |
+| `reveal()` | Reads the VRF seed from `blocks[committed+1]`, returns a random `uint64`, deletes the commit box. Requires at least 9 rounds to have passed (strict `>`). Fails after 900 rounds. |
+| `reclaim()` | Deletes an expired commit (900+ rounds old) so the user can recommit. Frees the associated box MBR. |
 
 ## Build Exclusion
 
-This directory is excluded from the Next.js TypeScript build via `tsconfig.json` — it's reference source only.
+This directory is excluded from the Next.js TypeScript build via `tsconfig.json` — it's reference source only. The `@algorandfoundation/tealscript` import does not need to be installed in the project's `node_modules`.

@@ -16,17 +16,23 @@ export const RARITY_COLORS: Record<PrizeRarity, string> = {
 // IMPORTANT: Every prize must have a valid assetId (the Algorand
 // Standard Asset ID of your token or NFT). The placeholder value 0
 // will NOT work on-chain -- replace it before enabling live mode.
+//
+// amount is in the asset's smallest unit:
+//   - For ASA tokens: base units (e.g., 500 = 500 base units).
+//     If your token has 6 decimals, 500 base units = 0.0005 tokens.
+//     For 500 whole tokens, set amount to 500_000_000.
+//   - For NFTs (type "nft"): always transferred as 1 regardless of amount.
+//   - For ALGO prizes (assetId 0): microALGO (1_000_000 = 1 ALGO).
 // ============================================================
 export const lootboxConfig = {
   // Price in ALGO to open one loot box
   cratePrice: 10,
   cratePriceMicroAlgo: 10_000_000,
 
-  // Number of rounds to wait between commit and reveal (VRF randomness)
-  commitDelayRounds: 8,
-
-  // Algorand Randomness Beacon app ID (mainnet default: 947461882)
-  randomnessBeaconAppId: 947461882,
+  // Minimum rounds to wait between commit and reveal. The contract uses
+  // strict > (globals.round > committed + 8), so the effective wait is 9.
+  // Reference only — the client and contract enforce this independently.
+  commitDelayRounds: 9,
 
   prizes: [
     {

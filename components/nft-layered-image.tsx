@@ -91,8 +91,8 @@ export default function NftLayeredImage({
   const layerUrls = useMemo(
     () =>
       layerEntries.map(function resolveUrl(entry) {
-        var layerKey = entry.category + ":" + entry.traitValue + ":" + (entry.previewImageUrl ?? "default");
-        var currentIndex = layerAttemptIndex[layerKey] ?? 0;
+        const layerKey = entry.category + ":" + entry.traitValue + ":" + (entry.previewImageUrl ?? "default");
+        const currentIndex = layerAttemptIndex[layerKey] ?? 0;
         return entry.candidates[currentIndex]?.src ?? entry.candidates[0]?.src;
       }),
     [layerAttemptIndex, layerEntries]
@@ -100,8 +100,8 @@ export default function NftLayeredImage({
 
   // Preload images for smoother layer transitions
   useEffect(() => {
-    var images = layerUrls.map(function preload(url) {
-      var image = new window.Image();
+    const images = layerUrls.map(function preload(url) {
+      const image = new window.Image();
       image.decoding = "async";
       image.loading = "eager";
       image.src = url;
@@ -109,6 +109,7 @@ export default function NftLayeredImage({
     });
 
     return function cleanup() {
+      images.forEach(function cancel(img) { img.src = ""; });
       images.length = 0;
     };
   }, [layerUrls]);
@@ -145,9 +146,9 @@ export default function NftLayeredImage({
       style={{ width: size, height: size }}
     >
       {layerEntries.map(function renderLayer(entry) {
-        var layerKey = entry.category + ":" + entry.traitValue + ":" + (entry.previewImageUrl ?? "default");
-        var currentIndex = layerAttemptIndex[layerKey] ?? 0;
-        var imageUrl = entry.candidates[currentIndex]?.src;
+        const layerKey = entry.category + ":" + entry.traitValue + ":" + (entry.previewImageUrl ?? "default");
+        const currentIndex = layerAttemptIndex[layerKey] ?? 0;
+        const imageUrl = entry.candidates[currentIndex]?.src;
         if (!imageUrl) return null;
 
         return (
@@ -159,9 +160,9 @@ export default function NftLayeredImage({
             loading="eager"
             onError={function tryNext() {
               setLayerAttemptIndex(function advance(current) {
-                var nextIndex = (current[layerKey] ?? 0) + 1;
+                const nextIndex = (current[layerKey] ?? 0) + 1;
                 if (nextIndex >= entry.candidates.length) return current;
-                var updated: Record<string, number> = {};
+                const updated: Record<string, number> = {};
                 Object.keys(current).forEach(function copy(k) {
                   updated[k] = current[k];
                 });

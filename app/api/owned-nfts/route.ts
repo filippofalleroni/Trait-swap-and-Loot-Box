@@ -4,43 +4,7 @@ import { INDEXER_BASE_URL, resolveArc19Url } from "@/lib/algorand";
 import { COLLECTION_CREATOR_ADDRESS, COLLECTION_UNIT_PREFIX } from "@/config/collection";
 import type { CollectionNft, OfficialTraitCategory } from "@/lib/types";
 import { isOfficialTraitCategory, getTraitLayerImageUrl } from "@/lib/nft-layering";
-
-/* ------------------------------------------------------------------ */
-/*  SSRF hostname blocklist                                            */
-/* ------------------------------------------------------------------ */
-function isBlockedHostname(hostname: string): boolean {
-  if (
-    hostname === "localhost" ||
-    hostname === "127.0.0.1" ||
-    hostname === "0.0.0.0" ||
-    hostname === "[::1]" ||
-    hostname === "[::ffff:127.0.0.1]" ||
-    hostname === "[0:0:0:0:0:0:0:1]"
-  ) {
-    return true;
-  }
-  if (
-    hostname.endsWith(".local") ||
-    hostname.endsWith(".internal") ||
-    hostname.endsWith(".localhost")
-  ) {
-    return true;
-  }
-  if (
-    hostname.startsWith("10.") ||
-    hostname.startsWith("192.168.") ||
-    hostname.startsWith("169.254.") ||
-    hostname.startsWith("0.") ||
-    /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
-    /^127\./.test(hostname)
-  ) {
-    return true;
-  }
-  if (hostname === "metadata.google.internal" || hostname === "169.254.169.254") {
-    return true;
-  }
-  return false;
-}
+import { isBlockedHostname } from "@/lib/security";
 
 /* ------------------------------------------------------------------ */
 /*  Rate limiting                                                      */

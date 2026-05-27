@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import algosdk from "algosdk";
+import { isValidAlgorandAddress } from "@/lib/algorand";
 
 type NfdLookupRecord = {
   name?: string;
@@ -33,15 +33,6 @@ function isRateLimited(key: string): boolean {
   return entry.count > RATE_LIMIT_MAX;
 }
 
-function isValidAlgorandAddress(address: string): boolean {
-  try {
-    algosdk.decodeAddress(address);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export async function GET(request: NextRequest) {
   const address = request.nextUrl.searchParams.get("address")?.trim();
 
@@ -63,10 +54,14 @@ export async function GET(request: NextRequest) {
   lookupUrl.searchParams.set("address", address);
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(function () { controller.abort(); }, 10_000);
     const response = await fetch(lookupUrl, {
       headers: { Accept: "application/json" },
       next: { revalidate: 300 },
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
 
     if (response.status === 404) {
       return NextResponse.json({ nfd: null });

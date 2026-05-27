@@ -71,6 +71,7 @@ Copy `.env.example` to `.env.local` and configure:
 
 | Variable | Description | Default |
 |---|---|---|
+| `NEXT_PUBLIC_ALGORAND_NETWORK` | Network for wallet connections: `mainnet`, `testnet`, or `localnet`. Must match the algod/indexer URLs. | `mainnet` |
 | `NEXT_PUBLIC_ALGOD_URL` | Algorand node API URL. Use `https://testnet-api.4160.nodely.dev` for development. | `https://mainnet-api.4160.nodely.dev` |
 | `NEXT_PUBLIC_INDEXER_URL` | Algorand indexer API URL. Must match the same network as the algod URL. | `https://mainnet-idx.4160.nodely.dev` |
 
@@ -81,6 +82,7 @@ Copy `.env.example` to `.env.local` and configure:
 | `MANAGER_MNEMONIC` | 25-word mnemonic for the collection's **manager wallet**. This wallet must be set as the manager address on every NFT ASA. Used server-side only. | *(required)* |
 | `PINATA_JWT` | JWT token from [Pinata](https://app.pinata.cloud) for IPFS uploads. Navigate to API Keys and generate a new key. | *(required)* |
 | `TREASURY_ADDRESS` | Algorand address that receives trait swap and loot box fees. | *(required)* |
+| `COLLECTION_CREATOR_ADDRESS` | Algorand address of the NFT collection creator. Used to validate that assets belong to your collection during ARC-19 updates. Leave blank to skip creator validation. | *(empty)* |
 | `ARC19_LIVE_UPDATES_ENABLED` | Set to `"true"` to enable real on-chain ARC-19 metadata updates. When `"false"`, the mint endpoint runs in preview mode. | `false` |
 
 ### Loot Box
@@ -91,19 +93,20 @@ Copy `.env.example` to `.env.local` and configure:
 | `LOOTBOX_CONTRACT_APP_ID` | Application ID of the deployed commit-reveal smart contract. Set to `0` or leave empty for preview mode. | `0` |
 | `LOOTBOX_LIVE_ENABLED` | Set to `"true"` to enable real prize distribution. When `"false"`, prizes are resolved but not distributed on-chain. | `false` |
 | `LOOTBOX_PRICE_ALGO` | Price in ALGO to open one loot box. Overrides the value in `config/lootbox.ts`. | `10` |
-| `LOOTBOX_PAUSED` | Set to `"true"` to temporarily pause the loot box reveal endpoint (returns 503). | `false` |
+| `LOOTBOX_PAUSED` | Set to `"true"` to temporarily pause loot box commits and reveals (returns 503). | `false` |
 
 ### Admin & Access Control
 
 | Variable | Description | Default |
 |---|---|---|
-| `ADMIN_WALLETS` | Comma-separated Algorand wallet addresses that can access the admin panel. Can also be hardcoded in `config/admin.ts`. | *(empty)* |
+| `ADMIN_WALLETS` | Comma-separated Algorand wallet addresses that can access the admin panel. Overrides the hardcoded list in `config/admin.ts` when set. | *(empty)* |
 
 ### Optional
 
 | Variable | Description | Default |
 |---|---|---|
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob storage token for persisting prize configuration across deployments. Without this, prize config saves to `/tmp/` (resets on redeploy). | *(empty)* |
+| `LOOTBOX_PRIZES_BLOB_URL` | Direct URL to the Blob-stored prize JSON. Required alongside `BLOB_READ_WRITE_TOKEN` for the reveal and prize routes to read admin-saved prize config. | *(empty)* |
 
 ---
 
@@ -139,10 +142,11 @@ Trait removal follows the same flow but clears the trait from the metadata prope
 ## How the Loot Box Works
 
 1. **User clicks "Open Loot Box"** and opts in to any prize ASAs they have not yet opted in to.
-2. **Commit phase** -- The server builds an atomic transaction group containing a payment (user pays crate price to treasury) and an application call to the smart contract's `commit()` method. The user signs both.
-3. **Wait** -- The user waits at least 8 rounds (~12-16 seconds) for the VRF seed to finalize.
-4. **Reveal phase** -- The server verifies the payment, then uses VRF-derived randomness to select a prize via weighted random selection.
-5. **Distribution** -- In live mode, the master wallet sends the prize (token or NFT transfer) to the user. The result is displayed with a rarity-colored animation.
+2. **Commit phase** -- The server builds an atomic transaction group containing a payment (user pays crate price to treasury) and an application call to the smart contract's `commit()` method. The contract verifies the payment (correct receiver, amount, sender) before recording the commit. The user signs both transactions.
+3. **Wait** -- The client polls the network and waits at least 9 rounds (~27 seconds) for the VRF seed to finalize. A progress indicator shows remaining rounds.
+4. **On-chain reveal** -- The client requests an unsigned `reveal()` app call from the server, signs it, and submits it. The contract reads the VRF seed from `blocks[commitRound + 1]`, extracts a random `uint64`, deletes the commit box, and returns the value via ABI return.
+5. **Server verification** -- The server verifies the on-chain reveal transaction via the indexer, reads the ABI return value from the transaction logs, and uses it for weighted prize selection.
+6. **Distribution** -- In live mode, the master wallet sends the prize (token or NFT transfer) to the user. The result is displayed with a rarity-colored animation.
 
 ### Commit-Reveal Randomness
 
@@ -150,11 +154,15 @@ The smart contract (in `contracts/lootbox-commit-reveal/`) implements:
 
 | Method | Description |
 |---|---|
-| `commit()` | Records the current Algorand round for the caller. |
-| `reveal()` | Reads the VRF seed from block `commitRound + 1`, extracts a random `uint64`, and deletes the commit. Fails before 8 rounds or after 900 rounds. |
-| `reclaim()` | Cleans up expired commits (900+ rounds old) so users can recommit. |
+| `createApplication(treasury, price)` | Deploy-time setup. Sets the treasury address and crate price in global state. |
+| `configure(treasury, price)` | Creator-only. Updates treasury address and/or crate price after deployment. |
+| `commit()` | Verifies the preceding payment in the atomic group (correct receiver, amount, sender), then records the current round. |
+| `reveal()` | Reads the VRF seed from block `commitRound + 1`, extracts a random `uint64`, deletes the commit box, and returns the value. Requires at least 9 rounds to have passed (strict `>`). Fails after 900 rounds. |
+| `reclaim()` | Cleans up expired commits (900+ rounds old) so users can recommit. Frees the associated box MBR. |
 
-The randomness is derived from Algorand's VRF beacon, which could not have been known at commit time, making results verifiable and tamper-resistant.
+The randomness is derived from the Algorand VRF block seed, which could not have been known at commit time, making results verifiable and tamper-resistant. The user calls `reveal()` on-chain themselves -- the server reads the ABI return value from the confirmed transaction's logs, ensuring the random number is generated entirely by the smart contract and verifiable by anyone.
+
+The contract account must be funded with enough ALGO to cover box MBR for the maximum number of concurrent outstanding commits. Commit boxes are automatically deleted when `reveal()` succeeds. If a user abandons a commit, `reclaim()` can clean it up after 900 rounds.
 
 ---
 
@@ -172,7 +180,10 @@ npm install -g @algorandfoundation/tealscript
 npx tealscript contracts/lootbox-commit-reveal/contract.algo.ts contracts/lootbox-commit-reveal/artifacts
 
 # Deploy using AlgoKit or goal
+# createApplication requires: treasury address, crate price in microALGO
 algokit deploy
+
+# Fund the contract account for box MBR (see contracts/README.md)
 
 # Set the app ID in .env.local
 LOOTBOX_CONTRACT_APP_ID=<your-app-id>
@@ -194,7 +205,7 @@ The template runs in **preview mode** by default for both features:
 | Feature | Preview Behavior | Live Behavior | Env Var to Enable |
 |---|---|---|---|
 | Trait Swap | Payment is verified but no IPFS upload or on-chain update occurs. Returns a preview response. | Full flow: IPFS upload, ARC-19 reserve address update on-chain. | `ARC19_LIVE_UPDATES_ENABLED=true` |
-| Loot Box | Payment is sent to treasury. Prize is resolved locally (no smart contract interaction). Not distributed. | Atomic payment + app call group. VRF-derived randomness. Prize distributed from master wallet. | `LOOTBOX_LIVE_ENABLED=true` |
+| Loot Box | Payment is sent to treasury (real ALGO is spent). Prize is resolved locally using server-side randomness (no smart contract interaction). Not distributed on-chain. | Atomic payment + app call group. VRF-derived randomness. Prize distributed from master wallet. | `LOOTBOX_LIVE_ENABLED=true` |
 
 This lets you develop the UI, test wallet integration, and verify payment flows without risking real assets.
 
@@ -213,15 +224,18 @@ This lets you develop the UI, test wallet integration, and verify payment flows 
 - **Admin authentication** -- Admin access requires signing a challenge nonce with Ed25519 signature verification. The challenge transaction is validated for type (payment), zero amount, self-payment, and absence of rekey/close fields. Sessions expire after 1 hour.
 - **Safe error messages** -- API routes return only pre-approved error strings to the client, preventing internal details from leaking.
 - **Path traversal protection** -- Trait names are sanitized before constructing layer image URLs, stripping `../`, `/`, `\`, `:`, and null bytes.
-- **Wallet separation** -- The template enforces using separate wallets for the manager (metadata authority) and the master (prize pool), limiting blast radius if a key is compromised.
-- **Loot box pause switch** -- Set `LOOTBOX_PAUSED=true` to immediately halt all reveals without redeploying.
+- **Wallet separation** -- The template recommends using separate wallets for the manager (metadata authority) and the master (prize pool), limiting blast radius if a key is compromised.
+- **Loot box pause switch** -- Set `LOOTBOX_PAUSED=true` to immediately halt new commits and reveals without redeploying.
+- **On-chain randomness** -- In live mode, randomness is generated entirely by the smart contract via VRF seed extraction. The server reads the ABI return value from the confirmed reveal transaction -- it never touches the VRF seed directly. There is no fallback to server-side `crypto.randomBytes` in live mode.
+- **Contract-enforced payment** -- The smart contract's `commit()` method verifies the preceding payment in the atomic group (correct receiver, amount, sender). No one can commit without paying.
+- **Atomic group verification** -- In live mode, the commit transaction group (payment + app call) is built server-side with `assignGroupID`. The reveal route verifies the on-chain reveal transaction's app ID and sender.
 
 ### Production Hardening Recommendations
 
 - **Persistent replay protection** -- The in-memory transaction ID set resets on server restart. For production, store used transaction IDs in a database (Redis, Vercel KV, Supabase).
 - **Prize locking** -- Implement a lock-distribute-confirm pattern with database persistence to handle partial failures during prize distribution.
 - **Session persistence** -- Admin sessions are in-memory. Use encrypted httpOnly cookies or a session store for production.
-- **Group transaction verification** -- In live mode, verify that payment and app call transactions are in the same atomic group before processing reveals.
+- **Commit box cleanup** -- Commit boxes are deleted automatically when `reveal()` succeeds. For abandoned commits (user commits but never reveals), expired entries can be cleaned via `reclaim()` after 900 rounds. Consider a periodic cleanup script for high-traffic deployments.
 - **Persistent rate limiting** -- The in-memory rate limiters reset on restart. Use edge middleware or a distributed rate limiter (Redis, Vercel KV) for production.
 - **Smart contract audit** -- The included contract is a reference implementation. Have it reviewed before deploying with real funds.
 
@@ -235,6 +249,8 @@ This lets you develop the UI, test wallet integration, and verify payment flows 
 2. Import the repository at [vercel.com](https://vercel.com).
 3. Add all environment variables under **Settings > Environment Variables**. Keep server-side variables (`MANAGER_MNEMONIC`, `LOOTBOX_MASTER_MNEMONIC`, `PINATA_JWT`) as regular env vars -- never prefix them with `NEXT_PUBLIC_`.
 4. Deploy.
+
+**Note:** The mint and reveal API routes use `maxDuration = 60` (60-second timeout) for indexer retry loops. On Vercel's Hobby plan, the maximum is 10 seconds. A **Pro plan** (or self-hosting) is recommended for live mode.
 
 For persistent prize configuration across redeployments, configure `BLOB_READ_WRITE_TOKEN` with [Vercel Blob storage](https://vercel.com/docs/storage/vercel-blob).
 
@@ -264,9 +280,10 @@ app/
     trait-lab/payment-tx/route.ts   Build unsigned payment for trait swap
     trait-lab/mint/route.ts         Verify payment, update ARC-19 metadata
     lootbox/commit/route.ts         Build unsigned commit transactions
-    lootbox/reveal/route.ts         Verify payment, resolve & distribute prize
+    lootbox/build-reveal/route.ts   Build unsigned reveal app call
+    lootbox/reveal/route.ts         Verify on-chain reveal, resolve & distribute prize
     lootbox/prizes/route.ts         Return prize list with probabilities
-    lootbox/buyer-balance/route.ts  Master wallet ALGO balance
+    lootbox/buyer-balance/route.ts  Prize pool wallet ALGO balance
     owned-nfts/route.ts             Query wallet's collection NFTs
     nfd/route.ts                    NFD name resolution proxy
     trait-counts/route.ts           Trait popularity counts
@@ -303,6 +320,7 @@ lib/
   manager-signer.ts                 Load manager wallet from env mnemonic
   nft-layering.ts                   Layer order + trait name sanitization
   pinata.ts                         IPFS upload via Pinata
+  security.ts                       SSRF hostname blocklist for metadata fetching
   treasury.ts                       Treasury address getter
   format.ts                         ALGO formatting + address utilities
   types.ts                          TypeScript types

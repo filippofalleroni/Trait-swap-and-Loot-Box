@@ -136,7 +136,7 @@ export async function adminCreateSession(
       throw new Error("Challenge transaction must be a self-payment.");
     }
   }
-  if (payFields?.amount !== undefined && payFields.amount !== BigInt(0)) {
+  if (payFields?.amount !== undefined && Number(payFields.amount) !== 0) {
     throw new Error("Challenge transaction must have zero amount.");
   }
 
@@ -240,6 +240,9 @@ export async function adminSavePrizes(
   if (!Array.isArray(prizes)) {
     throw new Error("Prizes must be an array.");
   }
+  if (prizes.length === 0) {
+    throw new Error("At least one prize is required.");
+  }
   if (prizes.length > 200) {
     throw new Error("Too many prizes (max 200).");
   }
@@ -266,6 +269,13 @@ export async function adminSavePrizes(
     }
     if (typeof p.weight !== "number" || p.weight <= 0 || !Number.isFinite(p.weight)) {
       throw new Error("Prize weight must be a positive number.");
+    }
+    // Validate color field — must be a valid CSS hex color to prevent injection
+    if (
+      typeof p.color !== "string" ||
+      !/^#[0-9a-fA-F]{3,8}$/.test(p.color)
+    ) {
+      throw new Error("Invalid prize color. Must be a CSS hex color (e.g. #ff0000).");
     }
   }
 
@@ -321,7 +331,7 @@ export async function adminGetRevenue(walletAddress: string): Promise<{
   try {
     const masterAccount = getLootboxMasterAccount();
     const masterInfo = await algod
-      .accountInformation(masterAccount.addr)
+      .accountInformation(masterAccount.addr.toString())
       .do();
     masterWalletBalanceMicroAlgo = Number(masterInfo.amount ?? 0);
   } catch {
@@ -350,7 +360,7 @@ export async function adminGetBuyerNfts(
     const algod = getAlgodClient();
     const masterAccount = getLootboxMasterAccount();
     const accountInfo = await algod
-      .accountInformation(masterAccount.addr)
+      .accountInformation(masterAccount.addr.toString())
       .do();
 
     // algosdk v3 algod response uses camelCase (assetId, amount as bigint).
@@ -399,9 +409,10 @@ export async function adminOptIn(
   const params = await algod.getTransactionParams().do();
 
   // Build a zero-amount asset transfer to self (opt-in).
+  const masterAddr = masterAccount.addr.toString();
   const txn = algosdk.makeAssetTransferTxnWithSuggestedParamsFromObject({
-    sender: masterAccount.addr,
-    receiver: masterAccount.addr,
+    sender: masterAddr,
+    receiver: masterAddr,
     assetIndex: assetId,
     amount: 0,
     suggestedParams: params,

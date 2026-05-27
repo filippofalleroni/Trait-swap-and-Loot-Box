@@ -100,10 +100,10 @@ export default function TraitSwapper() {
   useEffect(() => {
     if (!isConnected || !walletAddress) return;
 
-    var isCancelled = false;
+    let isCancelled = false;
 
     // Delay showing the loading spinner by 300ms to avoid a flash for fast loads
-    var loadingTimer = setTimeout(function showLoading() {
+    const loadingTimer = setTimeout(function showLoading() {
       if (!isCancelled) setLoadingNfts(true);
     }, 300);
 
@@ -111,14 +111,14 @@ export default function TraitSwapper() {
 
     async function doLoad() {
       try {
-        var res = await fetch(
+        const res = await fetch(
           "/api/owned-nfts?wallet=" + encodeURIComponent(walletAddress!),
           { cache: "no-store" }
         );
         if (!res.ok) throw new Error("NFT API failed with status " + res.status);
 
-        var data = await res.json();
-        var nfts: CollectionNft[] = data.nfts ?? [];
+        const data = await res.json();
+        const nfts: CollectionNft[] = data.nfts ?? [];
         if (isCancelled) return;
 
         // If API returns empty (no collection configured), fall back to mock data
@@ -268,8 +268,8 @@ export default function TraitSwapper() {
   async function executeMint() {
     if (!walletAddress || !selectedNft) return;
 
-    var traitId = selectedTrait?.id ?? "remove-" + activeCategory;
-    var isRemoval = !selectedTrait;
+    const traitId = selectedTrait?.id ?? "remove-" + activeCategory;
+    const isRemoval = !selectedTrait;
 
     setShowConfirmModal(false);
     setMintStep("signing");
@@ -277,9 +277,10 @@ export default function TraitSwapper() {
     setMintResult(null);
     setPendingPaymentTxId(null);
 
+    let paymentConfirmed = false;
     try {
       // Step 1: Get unsigned payment transaction
-      var payRes = await fetch("/api/trait-lab/payment-tx", {
+      const payRes = await fetch("/api/trait-lab/payment-tx", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -289,35 +290,36 @@ export default function TraitSwapper() {
       });
 
       if (!payRes.ok) {
-        var errData = await payRes.json().catch(function () { return {} as Record<string, string>; });
+        const errData = await payRes.json().catch(function () { return {} as Record<string, string>; });
         throw new Error(errData.error ?? "Failed to create payment transaction");
       }
 
-      var payData = await payRes.json();
-      var unsignedTxnBase64: string = payData.unsignedTxnBase64;
+      const payData = await payRes.json();
+      const unsignedTxnBase64: string = payData.unsignedTxnBase64;
 
       // Step 2: Sign with wallet
-      var txnBytes = new Uint8Array(Buffer.from(unsignedTxnBase64, "base64"));
+      const txnBytes = new Uint8Array(Buffer.from(unsignedTxnBase64, "base64"));
 
-      var signedTxns = await signTransactions([txnBytes]);
-      var signedTxn = signedTxns[0];
+      const signedTxns = await signTransactions([txnBytes]);
+      const signedTxn = signedTxns[0];
       if (!signedTxn) throw new Error("Transaction was not signed");
 
       // Step 3: Submit signed transaction to the chain
       setMintStep("submitting");
 
-      var algodClient = new algosdk.Algodv2("", ALGOD_BASE_URL, "");
-      var submitResult = await algodClient
+      const algodClient = new algosdk.Algodv2("", ALGOD_BASE_URL, "");
+      const submitResult = await algodClient
         .sendRawTransaction(signedTxn)
         .do();
-      var paymentTxId: string = submitResult.txid;
+      const paymentTxId: string = submitResult.txid;
       setPendingPaymentTxId(paymentTxId);
       await algosdk.waitForConfirmation(algodClient, paymentTxId, 10);
+      paymentConfirmed = true;
 
       // Step 4: Trigger the mint / ARC-19 update
       setMintStep("minting");
 
-      var mintRes = await fetch("/api/trait-lab/mint", {
+      const mintRes = await fetch("/api/trait-lab/mint", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -329,19 +331,19 @@ export default function TraitSwapper() {
       });
 
       if (!mintRes.ok) {
-        var mintErrData = await mintRes.json().catch(function () { return {} as Record<string, string>; });
+        const mintErrData = await mintRes.json().catch(function () { return {} as Record<string, string>; });
         throw new Error(mintErrData.error ?? "Mint failed");
       }
 
-      var result = await mintRes.json();
+      const result = await mintRes.json();
 
       // Optimistic update: apply the trait change to the local NFT state immediately
       if (selectedTrait && isOfficialTraitCategory(selectedTrait.category)) {
-        var updatedLayers = Object.assign({}, selectedNft.layers);
-        var updatedLayerImageUrls = Object.assign({}, selectedNft.layerImageUrls);
+        const updatedLayers = Object.assign({}, selectedNft.layers);
+        const updatedLayerImageUrls = Object.assign({}, selectedNft.layerImageUrls);
         updatedLayers[selectedTrait.category as OfficialTraitCategory] = selectedTrait.name;
         updatedLayerImageUrls[selectedTrait.category as OfficialTraitCategory] = selectedTrait.imageUrl;
-        var updatedNft: CollectionNft = Object.assign({}, selectedNft, {
+        const updatedNft: CollectionNft = Object.assign({}, selectedNft, {
           layers: updatedLayers,
           layerImageUrls: updatedLayerImageUrls,
         });
@@ -350,11 +352,11 @@ export default function TraitSwapper() {
         });
         setSelectedNft(updatedNft);
       } else if (isRemoval && isOfficialTraitCategory(activeCategory)) {
-        var removedLayers = Object.assign({}, selectedNft.layers);
-        var removedLayerImageUrls = Object.assign({}, selectedNft.layerImageUrls);
+        const removedLayers = Object.assign({}, selectedNft.layers);
+        const removedLayerImageUrls = Object.assign({}, selectedNft.layerImageUrls);
         delete removedLayers[activeCategory];
         delete removedLayerImageUrls[activeCategory];
-        var removedNft: CollectionNft = Object.assign({}, selectedNft, {
+        const removedNft: CollectionNft = Object.assign({}, selectedNft, {
           layers: removedLayers,
           layerImageUrls: removedLayerImageUrls,
         });
@@ -376,10 +378,9 @@ export default function TraitSwapper() {
         .catch(function () { /* ignore */ });
     } catch (err: unknown) {
       setMintStep("error");
-      var message = err instanceof Error ? err.message : "Something went wrong";
+      const message = err instanceof Error ? err.message : "Something went wrong";
       setMintError(message);
-      // Only show generic toast if payment hadn't gone through yet
-      if (!pendingPaymentTxId) {
+      if (!paymentConfirmed) {
         pushToast("Error: " + message);
       }
     }

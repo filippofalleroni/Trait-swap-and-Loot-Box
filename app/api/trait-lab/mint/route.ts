@@ -9,6 +9,7 @@ import { mockTraits } from "@/config/mock-data";
 import { feeConfig } from "@/config/fees";
 import type { NftMetadata, OfficialTraitCategory } from "@/lib/types";
 import { isOfficialTraitCategory } from "@/lib/nft-layering";
+import { isBlockedHostname } from "@/lib/security";
 
 /**
  * Allow this route up to 60 seconds for indexer retries + IPFS uploads + on-chain tx.
@@ -19,57 +20,22 @@ export const maxDuration = 60;
 const ALGO_TXID_REGEX = /^[A-Z2-7]{52}$/;
 
 /* ------------------------------------------------------------------ */
-/*  SSRF hostname blocklist                                            */
-/* ------------------------------------------------------------------ */
-function isBlockedHostname(hostname: string): boolean {
-  // Exact matches
-  if (
-    hostname === "localhost" ||
-    hostname === "127.0.0.1" ||
-    hostname === "0.0.0.0" ||
-    hostname === "[::1]" ||
-    hostname === "[::ffff:127.0.0.1]" ||
-    hostname === "[0:0:0:0:0:0:0:1]"
-  ) {
-    return true;
-  }
-  // Suffix matches for local/internal TLDs
-  if (
-    hostname.endsWith(".local") ||
-    hostname.endsWith(".internal") ||
-    hostname.endsWith(".localhost")
-  ) {
-    return true;
-  }
-  // Private IPv4 ranges (including link-local)
-  if (
-    hostname.startsWith("10.") ||
-    hostname.startsWith("192.168.") ||
-    hostname.startsWith("169.254.") ||
-    hostname.startsWith("0.") ||
-    /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
-    /^127\./.test(hostname)
-  ) {
-    return true;
-  }
-  // Cloud metadata endpoints
-  if (hostname === "metadata.google.internal" || hostname === "169.254.169.254") {
-    return true;
-  }
-  return false;
-}
-
-/* ------------------------------------------------------------------ */
 /*  Rate limiting                                                      */
 /* ------------------------------------------------------------------ */
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX = 5;
 
+const ipRateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const IP_RATE_LIMIT_MAX = 20;
+
 function pruneRateLimitMap() {
   const now = Date.now();
   rateLimitMap.forEach((entry, key) => {
     if (now >= entry.resetAt) rateLimitMap.delete(key);
+  });
+  ipRateLimitMap.forEach((entry, key) => {
+    if (now >= entry.resetAt) ipRateLimitMap.delete(key);
   });
 }
 
@@ -85,9 +51,31 @@ function isRateLimited(key: string): boolean {
   return entry.count > RATE_LIMIT_MAX;
 }
 
+function isIpRateLimited(ip: string): boolean {
+  const now = Date.now();
+  if (ipRateLimitMap.size > 1000) pruneRateLimitMap();
+  const entry = ipRateLimitMap.get(ip);
+  if (!entry || now >= entry.resetAt) {
+    ipRateLimitMap.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return false;
+  }
+  entry.count++;
+  return entry.count > IP_RATE_LIMIT_MAX;
+}
+
+function getClientIp(request: NextRequest): string {
+  return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+}
+
+// NOTE: In-memory -- resets on serverless cold start. Use Redis/KV for production.
 const usedMintTxIds = new Set<string>();
 const usedMintTxTimestamps = new Map<string, number>();
 const MAX_USED_TX_AGE_MS = 1000 * 60 * 60;
+
+/* ------------------------------------------------------------------ */
+/*  Concurrent update guard (per asset ID, single instance only)       */
+/* ------------------------------------------------------------------ */
+const activeUpdates = new Set<number>();
 
 function pruneUsedMintTxIds() {
   const now = Date.now();
@@ -103,6 +91,15 @@ export async function POST(request: NextRequest) {
   let claimedTxId: string | null = null;
 
   try {
+    // IP-based rate limit (harder to spoof than wallet address)
+    const clientIp = getClientIp(request);
+    if (isIpRateLimited(clientIp)) {
+      return NextResponse.json(
+        { error: "Too many attempts. Please wait a minute." },
+        { status: 429 }
+      );
+    }
+
     const body = await request.json();
     const { nftAssetId, newTraitId, walletAddress, paymentTxId } = body as {
       nftAssetId?: number;
@@ -250,55 +247,70 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const currentMetadata = await fetchCurrentMetadata(nftAssetId);
-
-    if (!currentMetadata) {
-      // Transient infrastructure failure (indexer/IPFS down).
-      // Release the txId so the user can retry with the same valid payment.
+    // Prevent concurrent updates to the same NFT (single-instance guard)
+    if (activeUpdates.has(nftAssetId)) {
       usedMintTxIds.delete(paymentTxId);
       usedMintTxTimestamps.delete(paymentTxId);
       return NextResponse.json(
-        { error: "Could not load NFT metadata. Please try again." },
-        { status: 503 }
+        { error: "This NFT is already being updated. Please wait and try again." },
+        { status: 409 }
       );
     }
+    activeUpdates.add(nftAssetId);
 
-    const updatedProperties = {
-      ...(currentMetadata.properties ?? {}),
-    };
+    try {
+      const currentMetadata = await fetchCurrentMetadata(nftAssetId);
 
-    if (isRemoval) {
-      delete updatedProperties[category];
-    } else {
-      updatedProperties[category] = trait!.name;
+      if (!currentMetadata) {
+        // Transient infrastructure failure (indexer/IPFS down).
+        // Release the txId so the user can retry with the same valid payment.
+        usedMintTxIds.delete(paymentTxId);
+        usedMintTxTimestamps.delete(paymentTxId);
+        return NextResponse.json(
+          { error: "Could not load NFT metadata. Please try again." },
+          { status: 503 }
+        );
+      }
+
+      const updatedProperties = {
+        ...(currentMetadata.properties ?? {}),
+      };
+
+      if (isRemoval) {
+        delete updatedProperties[category];
+      } else {
+        updatedProperties[category] = trait!.name;
+      }
+
+      const newMetadata: NftMetadata = {
+        name: currentMetadata.name ?? `NFT #${nftAssetId}`,
+        description:
+          currentMetadata.description ?? "An NFT from this collection.",
+        image: currentMetadata.image ?? "",
+        image_mimetype: "image/png",
+        properties: updatedProperties,
+        external_url: currentMetadata.external_url,
+      };
+
+      const newCid = await uploadJsonToIpfs(newMetadata as unknown as Record<string, unknown>);
+      const newReserveAddress = computeArc19ReserveAddress(newCid);
+
+      const managerAccount = getManagerAccount();
+      const updateTxId = await updateArc19Metadata({
+        assetId: nftAssetId,
+        newReserveAddress,
+        managerAccount,
+      });
+
+      return NextResponse.json({
+        status: "submitted" as const,
+        note: isRemoval
+          ? `Trait removed from category ${category} on NFT ${nftAssetId}. Update txId: ${updateTxId ?? "N/A"}`
+          : `Trait "${trait!.name}" applied to NFT ${nftAssetId}. Update txId: ${updateTxId ?? "N/A"}`,
+      });
+    } finally {
+      activeUpdates.delete(nftAssetId);
     }
-
-    const newMetadata: NftMetadata = {
-      name: currentMetadata.name ?? `NFT #${nftAssetId}`,
-      description:
-        currentMetadata.description ?? "An NFT from this collection.",
-      image: currentMetadata.image ?? "",
-      image_mimetype: "image/png",
-      properties: updatedProperties,
-      external_url: currentMetadata.external_url,
-    };
-
-    const newCid = await uploadJsonToIpfs(newMetadata as unknown as Record<string, unknown>);
-    const newReserveAddress = computeArc19ReserveAddress(newCid);
-
-    const managerAccount = getManagerAccount();
-    const updateTxId = await updateArc19Metadata({
-      assetId: nftAssetId,
-      newReserveAddress,
-      managerAccount,
-    });
-
-    return NextResponse.json({
-      status: "submitted" as const,
-      note: isRemoval
-        ? `Trait removed from category ${category} on NFT ${nftAssetId}. Update txId: ${updateTxId ?? "N/A"}`
-        : `Trait "${trait!.name}" applied to NFT ${nftAssetId}. Update txId: ${updateTxId ?? "N/A"}`,
-    });
   } catch (err) {
     // Release the in-memory claim so the user can retry with the same payment tx.
     if (claimedTxId) {
@@ -360,12 +372,12 @@ async function verifyPayment({
         return { ok: false, reason: "Transaction contains a rekey field and is rejected" };
       }
 
-      if (txn.sender !== expectedSender) {
+      if (txn.sender?.toLowerCase() !== expectedSender.toLowerCase()) {
         return { ok: false, reason: "Sender mismatch" };
       }
 
       const paymentDetails = txn["payment-transaction"];
-      if (!paymentDetails || paymentDetails.receiver !== expectedRecipient) {
+      if (!paymentDetails || paymentDetails.receiver?.toLowerCase() !== expectedRecipient.toLowerCase()) {
         return { ok: false, reason: "Recipient mismatch" };
       }
 

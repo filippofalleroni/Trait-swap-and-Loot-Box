@@ -1,8 +1,10 @@
 import algosdk from "algosdk";
 import { CID } from "multiformats/cid";
-import * as dagPb from "@ipld/dag-pb";
 import * as raw from "multiformats/codecs/raw";
 import { create as createDigest } from "multiformats/hashes/digest";
+
+// dag-pb codec code — avoids importing the entire @ipld/dag-pb package
+const DAG_PB_CODE = 0x70;
 
 // ---------------------------------------------------------------------------
 // Node / Indexer clients
@@ -78,7 +80,7 @@ export function resolveArc19Url(
     const codec = arc19Match[2];
     const publicKey = algosdk.decodeAddress(reserve).publicKey;
     const reserveDigest = createDigest(0x12, publicKey);
-    const codecCode = codec === "dag-pb" ? dagPb.code : raw.code;
+    const codecCode = codec === "dag-pb" ? DAG_PB_CODE : raw.code;
     const cid =
       version === 0
         ? CID.createV0(reserveDigest).toString()
@@ -87,9 +89,8 @@ export function resolveArc19Url(
     return `${gateway}${cid}${suffix}`;
   }
 
-  if (url.startsWith("https://") || url.startsWith("http://")) {
-    return url;
-  }
+  if (url.startsWith("https://")) return url;
+  if (url.startsWith("http://")) return null;
 
   return null;
 }

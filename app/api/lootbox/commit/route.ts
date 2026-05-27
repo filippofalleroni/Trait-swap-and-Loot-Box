@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { NextResponse } from "next/server";
 import algosdk from "algosdk";
 import { getAlgodClient } from "@/lib/algorand";
@@ -5,8 +6,9 @@ import { getTreasuryAddress } from "@/lib/treasury";
 
 const LOOTBOX_LIVE = process.env.LOOTBOX_LIVE_ENABLED === "true";
 const CONTRACT_APP_ID = Number(process.env.LOOTBOX_CONTRACT_APP_ID ?? "0");
-const CRATE_PRICE_MICRO =
-  Number(process.env.LOOTBOX_PRICE_ALGO ?? "10") * 1_000_000;
+const CRATE_PRICE_MICRO = Math.round(
+  Number(process.env.LOOTBOX_PRICE_ALGO ?? "10") * 1_000_000
+);
 
 /* ------------------------------------------------------------------ */
 /*  Rate limiting                                                      */
@@ -15,10 +17,16 @@ const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX = 10;
 
+const ipRateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const IP_RATE_LIMIT_MAX = 20;
+
 function pruneRateLimitMap() {
   const now = Date.now();
   rateLimitMap.forEach((entry, key) => {
     if (now >= entry.resetAt) rateLimitMap.delete(key);
+  });
+  ipRateLimitMap.forEach((entry, key) => {
+    if (now >= entry.resetAt) ipRateLimitMap.delete(key);
   });
 }
 
@@ -34,10 +42,42 @@ function isRateLimited(key: string): boolean {
   return entry.count > RATE_LIMIT_MAX;
 }
 
+function isIpRateLimited(ip: string): boolean {
+  const now = Date.now();
+  if (ipRateLimitMap.size > 1000) pruneRateLimitMap();
+  const entry = ipRateLimitMap.get(ip);
+  if (!entry || now >= entry.resetAt) {
+    ipRateLimitMap.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return false;
+  }
+  entry.count++;
+  return entry.count > IP_RATE_LIMIT_MAX;
+}
+
+function getClientIp(request: Request): string {
+  const forwarded = (request.headers as Headers).get("x-forwarded-for");
+  return forwarded?.split(",")[0]?.trim() || "unknown";
+}
+
 export async function POST(request: Request) {
   try {
+    const clientIp = getClientIp(request);
+    if (isIpRateLimited(clientIp)) {
+      return NextResponse.json(
+        { error: "Too many requests. Please wait a minute." },
+        { status: 429 }
+      );
+    }
+
     const body = await request.json();
     const { walletAddress } = body as { walletAddress?: string };
+
+    if (process.env.LOOTBOX_PAUSED === "true") {
+      return NextResponse.json(
+        { error: "Loot box is temporarily paused." },
+        { status: 503 }
+      );
+    }
 
     if (!walletAddress || !algosdk.isValidAddress(walletAddress)) {
       return NextResponse.json(
@@ -91,12 +131,21 @@ export async function POST(request: Request) {
       note: new TextEncoder().encode("lootbox:open"),
     });
 
+    const commitSelector = new Uint8Array(
+      Buffer.from(
+        crypto.createHash("sha512-256").update("commit()void").digest()
+      ).subarray(0, 4)
+    );
+
+    const senderPk = algosdk.decodeAddress(walletAddress).publicKey;
+
     const appCallTxn =
       algosdk.makeApplicationCallTxnFromObject({
         sender: walletAddress,
         appIndex: CONTRACT_APP_ID,
         onComplete: algosdk.OnApplicationComplete.NoOpOC,
-        appArgs: [new TextEncoder().encode("commit")],
+        appArgs: [commitSelector],
+        boxes: [{ appIndex: CONTRACT_APP_ID, name: senderPk }],
         suggestedParams,
       });
 
@@ -112,6 +161,7 @@ export async function POST(request: Request) {
       txIds,
       unsignedTxns,
       mode: "live",
+      contractAppId: CONTRACT_APP_ID,
     });
   } catch (err: unknown) {
     console.error("[lootbox/commit]", err);

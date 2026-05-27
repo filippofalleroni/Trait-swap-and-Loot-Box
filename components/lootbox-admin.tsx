@@ -14,6 +14,7 @@ import {
   adminGetBuyerNfts,
   adminOptIn,
 } from "@/app/actions/admin";
+import { formatAlgo } from "@/lib/format";
 import type { PrizeTier, PrizeRarity } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -287,16 +288,6 @@ export default function LootboxAdmin() {
     } finally {
       setOptInLoading(false);
     }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Format helpers
-  // ---------------------------------------------------------------------------
-  function formatAlgo(microAlgos: number): string {
-    const algos = microAlgos / 1_000_000;
-    return algos % 1 === 0
-      ? algos.toFixed(0)
-      : algos.toFixed(6).replace(/0+$/, "");
   }
 
   // ---------------------------------------------------------------------------

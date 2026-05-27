@@ -40,6 +40,17 @@ const WALLET_ID_MAP: Record<SupportedWalletId, WalletId> = {
   lute: WalletId.LUTE,
 };
 
+function getNetworkId(): NetworkId {
+  const env = (typeof window !== "undefined"
+    ? (window as unknown as Record<string, unknown>).__NEXT_DATA__
+    : undefined) as unknown;
+  void env;
+  const raw = process.env.NEXT_PUBLIC_ALGORAND_NETWORK?.toLowerCase() ?? "";
+  if (raw === "testnet") return NetworkId.TESTNET;
+  if (raw === "localnet" || raw === "localhost") return NetworkId.LOCALNET;
+  return NetworkId.MAINNET;
+}
+
 function getWalletLabel(wallet: BaseWallet | null) {
   return wallet?.name ?? null;
 }
@@ -49,7 +60,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     () =>
       new WalletManager({
         wallets: [WalletId.PERA, WalletId.DEFLY, WalletId.LUTE],
-        defaultNetwork: NetworkId.MAINNET,
+        defaultNetwork: getNetworkId(),
       })
   );
   const [version, setVersion] = useState(0);
@@ -109,7 +120,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return () => {
       isCancelled = true;
     };
-  }, [manager.activeAddress]);
+  }, [manager, version]);
 
   const value = useMemo<WalletContextValue>(() => {
     const activeWallet = manager.activeWallet;

@@ -14,5 +14,6 @@ export const ADMIN_WALLETS: string[] = ENV_ADMIN_WALLETS.length > 0
 
 export function isAdminWallet(address: string | null): boolean {
   if (!address) return false;
-  return ADMIN_WALLETS.includes(address);
+  const normalized = address.toUpperCase();
+  return ADMIN_WALLETS.some(function (a) { return a.toUpperCase() === normalized; });
 }

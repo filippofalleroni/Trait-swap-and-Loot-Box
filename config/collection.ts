@@ -7,7 +7,7 @@
 // Replace with your actual creator address before going live.
 export const COLLECTION_CREATOR_ADDRESS = "YOUR_COLLECTION_CREATOR_ADDRESS";
 
-// ARC-69 or ARC-19 unit name prefix (e.g., "MONSTR", "MYPROJECT")
+// ARC-69 or ARC-19 unit name prefix (e.g., "MYNFT", "PROJ")
 export const COLLECTION_UNIT_PREFIX = "NFT";
 
 // The number of NFTs in your collection (used for display only)
@@ -18,15 +18,5 @@ export const COLLECTION_SIZE = 5000;
 // Leave empty if you serve trait images from /public instead of IPFS.
 export const TRAIT_IMAGE_BASE_URL = "";
 
-// The ordered list of trait layer categories your collection uses.
-// These must match the ARC-69 metadata property keys exactly.
-// Layers are composited in this order (first = bottom, last = top).
-export const OFFICIAL_TRAIT_CATEGORIES = [
-  "BACKGROUND",
-  "BODY",
-  "COMPANION",
-  "EYES",
-  "MOUTH",
-  "SKIN",
-  "TOP",
-] as const;
+// The canonical source for trait layer categories and ordering is
+// LAYER_ORDER in lib/nft-layering.ts. Do not duplicate it here.

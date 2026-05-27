@@ -53,6 +53,40 @@ export async function distributePrize({
   masterAccount: algosdk.Account;
   algodClient: algosdk.Algodv2;
 }): Promise<string> {
+  // Pre-flight balance check: verify the master wallet can cover the prize
+  // masterAccount.addr is an Address object in algosdk v3; use .toString()
+  // for string contexts to avoid implicit coercion issues.
+  const masterAddr = masterAccount.addr.toString();
+  const masterInfo = (await algodClient
+    .accountInformation(masterAddr)
+    .do()) as unknown as Record<string, unknown>;
+  const masterBalanceMicro = Number(masterInfo?.amount ?? 0);
+  const masterMinBalance = Number(masterInfo?.["min-balance"] ?? masterInfo?.["minBalance"] ?? 100_000);
+  const MIN_FEE = 1000;
+  const availableBalance = masterBalanceMicro - masterMinBalance;
+
+  if (prize.assetId === 0) {
+    if (availableBalance < prize.amount + MIN_FEE) {
+      throw new Error("Master wallet has insufficient balance for this prize.");
+    }
+  } else {
+    if (availableBalance < MIN_FEE) {
+      throw new Error("Master wallet has insufficient balance for this prize.");
+    }
+    const assets = (masterInfo.assets ?? []) as unknown as Array<
+      Record<string, unknown>
+    >;
+    const assetHolding = assets.find(function (a) {
+      const id = a["asset-id"] ?? a["assetId"] ?? a["asset_id"];
+      return Number(id) === prize.assetId;
+    });
+    const heldAmount = Number(assetHolding?.amount ?? 0);
+    const requiredAmount = prize.type === "nft" ? 1 : prize.amount;
+    if (heldAmount < requiredAmount) {
+      throw new Error("Master wallet has insufficient balance for this prize.");
+    }
+  }
+
   const suggestedParams = await algodClient.getTransactionParams().do();
 
   // Include the prize ID in the transaction note for audit trail
@@ -63,7 +97,7 @@ export async function distributePrize({
   if (prize.assetId === 0) {
     // ALGO prize — send a payment transaction (no opt-in needed)
     txn = algosdk.makePaymentTxnWithSuggestedParamsFromObject({
-      sender: masterAccount.addr,
+      sender: masterAddr,
       receiver: recipientAddress,
       amount: prize.amount,
       suggestedParams,
@@ -74,7 +108,7 @@ export async function distributePrize({
     await verifyRecipientOptedIn(algodClient, recipientAddress, prize.assetId);
 
     txn = algosdk.makeAssetTransferTxnWithSuggestedParamsFromObject({
-      sender: masterAccount.addr,
+      sender: masterAddr,
       receiver: recipientAddress,
       assetIndex: prize.assetId,
       amount: prize.type === "nft" ? 1 : prize.amount,
@@ -90,7 +124,7 @@ export async function distributePrize({
   await algosdk.waitForConfirmation(algodClient, txid, 4);
 
   console.log(
-    `[lootbox-distributor] Prize "${prize.name}" (${prize.type}) sent to ${recipientAddress} (txId: ${txid})`
+    `[lootbox-distributor] Prize "${prize.name}" (${prize.type}) distributed (txId: ${txid})`
   );
 
   return txid;

@@ -77,7 +77,6 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       balanceAlgo,
-      address: masterAddress,
     });
   } catch (err: unknown) {
     console.error("[lootbox/buyer-balance]", err);

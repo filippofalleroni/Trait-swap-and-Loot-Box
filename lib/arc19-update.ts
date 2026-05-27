@@ -97,7 +97,7 @@ export async function prepareArc19UpdateTransaction({
   // If a collection creator address is configured, verify the asset belongs
   // to the collection. This prevents updating assets you do not own.
   const expectedCreator = process.env.COLLECTION_CREATOR_ADDRESS?.trim();
-  if (expectedCreator && asset.params.creator !== expectedCreator) {
+  if (expectedCreator && asset.params.creator?.toLowerCase() !== expectedCreator.toLowerCase()) {
     throw new Error(
       `Asset ${assetId} creator ${asset.params.creator} does not match expected collection creator.`
     );
@@ -230,6 +230,27 @@ export async function updateArc19Metadata({
 
   const algodClient = getAlgodClient();
   const asset = await fetchAssetConfig(assetId);
+
+  if (!asset) {
+    throw new Error(`Could not load asset config for ${assetId}`);
+  }
+
+  const expectedCreator = process.env.COLLECTION_CREATOR_ADDRESS?.trim();
+  if (expectedCreator && asset.params.creator?.toLowerCase() !== expectedCreator.toLowerCase()) {
+    throw new Error(
+      `Asset ${assetId} creator ${asset.params.creator} does not match expected collection creator.`
+    );
+  }
+
+  const currentManager = asset.params.manager ?? "";
+  if (!currentManager) {
+    throw new Error(`Asset ${assetId} has no manager address set.`);
+  }
+  if (currentManager !== managerAccount.addr.toString()) {
+    throw new Error(
+      `Configured manager does not match asset manager ${currentManager} for asset ${assetId}.`
+    );
+  }
 
   // Preserve existing freeze/clawback addresses
   const freeze =

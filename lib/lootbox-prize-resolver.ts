@@ -24,11 +24,17 @@ export function resolvePrize(
   prizes: PrizeTier[],
   randomValue: number
 ): PrizeTier {
-  if (prizes.length === 0) {
+  // Filter out prizes with non-positive weights (defensive against
+  // malformed data loaded from blob storage bypassing admin validation).
+  const validPrizes = prizes.filter(function (p) {
+    return p.weight > 0;
+  });
+
+  if (validPrizes.length === 0) {
     throw new Error("Cannot resolve a prize from an empty prize list.");
   }
 
-  const totalWeight = prizes.reduce(function (sum, p) {
+  const totalWeight = validPrizes.reduce(function (sum, p) {
     return sum + p.weight;
   }, 0);
 
@@ -43,15 +49,15 @@ export function resolvePrize(
     ((randomValue * totalWeight) % totalWeight + totalWeight) % totalWeight;
   let cumulative = 0;
 
-  for (let i = 0; i < prizes.length; i++) {
-    cumulative += prizes[i].weight;
+  for (let i = 0; i < validPrizes.length; i++) {
+    cumulative += validPrizes[i].weight;
     if (bounded < cumulative) {
-      return prizes[i];
+      return validPrizes[i];
     }
   }
 
   // Fallback: return the last prize (handles floating-point edge cases)
-  return prizes[prizes.length - 1];
+  return validPrizes[validPrizes.length - 1];
 }
 
 /**
