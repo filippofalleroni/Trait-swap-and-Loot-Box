@@ -1,15 +1,19 @@
+import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import algosdk from "algosdk";
 import { INDEXER_BASE_URL, resolveArc19Url } from "@/lib/algorand";
 import { getTreasuryAddress } from "@/lib/treasury";
 import { getManagerAccount } from "@/lib/manager-signer";
-import { uploadJsonToIpfs } from "@/lib/pinata";
+import { isPinataConfigured, uploadJsonToIpfs, uploadBufferToIpfs } from "@/lib/pinata";
 import { computeArc19ReserveAddress, updateArc19Metadata } from "@/lib/arc19-update";
+import { composeNftImage } from "@/lib/nft-compose";
 import { mockTraits } from "@/config/mock-data";
 import { feeConfig } from "@/config/fees";
 import type { NftMetadata, OfficialTraitCategory } from "@/lib/types";
-import { isOfficialTraitCategory } from "@/lib/nft-layering";
+import { LAYER_ORDER, isOfficialTraitCategory } from "@/lib/nft-layering";
 import { isBlockedHostname } from "@/lib/security";
+
+const PAYMENT_NOTE_PREFIX = "traitswap:";
 
 /**
  * Allow this route up to 60 seconds for indexer retries + IPFS uploads + on-chain tx.
@@ -92,6 +96,13 @@ export async function POST(request: NextRequest) {
   let ipfsUploaded = false;
 
   try {
+    if (!isPinataConfigured()) {
+      return NextResponse.json(
+        { error: "IPFS upload is not configured. Set the PINATA_JWT environment variable." },
+        { status: 501 }
+      );
+    }
+
     // IP-based rate limit (harder to spoof than wallet address)
     const clientIp = getClientIp(request);
     if (isIpRateLimited(clientIp)) {
@@ -188,13 +199,24 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const expectedAmountAlgo = isRemoval
+      ? feeConfig.removalFeeAlgo
+      : trait?.priceAlgo;
+
+    if (expectedAmountAlgo === undefined || expectedAmountAlgo <= 0) {
+      usedMintTxIds.delete(paymentTxId);
+      usedMintTxTimestamps.delete(paymentTxId);
+      return NextResponse.json(
+        { error: "Invalid price configuration for this trait." },
+        { status: 500 }
+      );
+    }
+
     const paymentValid = await verifyPayment({
       txId: paymentTxId,
       expectedSender: walletAddress,
       expectedRecipient: getTreasuryAddress(),
-      expectedAmountAlgo: isRemoval
-        ? feeConfig.removalFeeAlgo
-        : (trait?.priceAlgo ?? 0),
+      expectedAmountAlgo,
     });
 
     if (!paymentValid.ok) {
@@ -293,11 +315,22 @@ export async function POST(request: NextRequest) {
         updatedProperties[category] = trait!.name;
       }
 
+      // Compose a new layered image from the updated properties
+      const layerMap = {} as Partial<Record<OfficialTraitCategory, string>>;
+      for (const cat of LAYER_ORDER) {
+        const val = updatedProperties[cat];
+        if (val && typeof val === "string") {
+          layerMap[cat] = val;
+        }
+      }
+      const { buffer: imageBuffer } = await composeNftImage(layerMap, LAYER_ORDER);
+      const imageCid = await uploadBufferToIpfs(imageBuffer, `nft-${nftAssetId}.png`);
+
       const newMetadata: NftMetadata = {
         name: currentMetadata.name ?? `NFT #${nftAssetId}`,
         description:
           currentMetadata.description ?? "An NFT from this collection.",
-        image: currentMetadata.image ?? "",
+        image: `ipfs://${imageCid}`,
         image_mimetype: "image/png",
         properties: updatedProperties,
         external_url: currentMetadata.external_url,
@@ -386,12 +419,12 @@ async function verifyPayment({
         return { ok: false, reason: "Transaction contains a rekey field and is rejected" };
       }
 
-      if (txn.sender?.toLowerCase() !== expectedSender.toLowerCase()) {
+      if (txn.sender !== expectedSender) {
         return { ok: false, reason: "Sender mismatch" };
       }
 
       const paymentDetails = txn["payment-transaction"];
-      if (!paymentDetails || paymentDetails.receiver?.toLowerCase() !== expectedRecipient.toLowerCase()) {
+      if (!paymentDetails || paymentDetails.receiver !== expectedRecipient) {
         return { ok: false, reason: "Recipient mismatch" };
       }
 
@@ -403,6 +436,14 @@ async function verifyPayment({
       // Trait swap payments are standalone transactions.
       if (txn.group) {
         return { ok: false, reason: "Payment must not be part of an atomic group" };
+      }
+
+      // Verify note field contains the expected trait-swap prefix to prevent
+      // cross-purpose transaction replay (e.g. reusing a lootbox payment).
+      const noteB64: string = txn.note ?? "";
+      const noteStr = noteB64 ? Buffer.from(noteB64, "base64").toString("utf-8") : "";
+      if (!noteStr.startsWith(PAYMENT_NOTE_PREFIX)) {
+        return { ok: false, reason: "Transaction note missing required trait-swap prefix" };
       }
 
       const expectedMicroAlgo = Math.round(expectedAmountAlgo * 1_000_000);

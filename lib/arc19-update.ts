@@ -1,3 +1,4 @@
+import "server-only";
 import algosdk from "algosdk";
 import { CID } from "multiformats/cid";
 import { getAlgodClient, INDEXER_BASE_URL } from "./algorand";
@@ -97,7 +98,7 @@ export async function prepareArc19UpdateTransaction({
   // If a collection creator address is configured, verify the asset belongs
   // to the collection. This prevents updating assets you do not own.
   const expectedCreator = process.env.COLLECTION_CREATOR_ADDRESS?.trim();
-  if (expectedCreator && asset.params.creator?.toLowerCase() !== expectedCreator.toLowerCase()) {
+  if (expectedCreator && asset.params.creator !== expectedCreator) {
     throw new Error(
       `Asset ${assetId} creator ${asset.params.creator} does not match expected collection creator.`
     );
@@ -108,7 +109,7 @@ export async function prepareArc19UpdateTransaction({
     throw new Error(`Asset ${assetId} has no manager address set.`);
   }
 
-  if (currentManager.toLowerCase() !== managerAddress.toLowerCase()) {
+  if (currentManager !== managerAddress) {
     throw new Error(
       `Configured manager ${managerAddress} does not match asset manager ${currentManager} for asset ${assetId}.`
     );
@@ -236,7 +237,7 @@ export async function updateArc19Metadata({
   }
 
   const expectedCreator = process.env.COLLECTION_CREATOR_ADDRESS?.trim();
-  if (expectedCreator && asset.params.creator?.toLowerCase() !== expectedCreator.toLowerCase()) {
+  if (expectedCreator && asset.params.creator !== expectedCreator) {
     throw new Error(
       `Asset ${assetId} creator ${asset.params.creator} does not match expected collection creator.`
     );
@@ -246,7 +247,7 @@ export async function updateArc19Metadata({
   if (!currentManager) {
     throw new Error(`Asset ${assetId} has no manager address set.`);
   }
-  if (currentManager.toLowerCase() !== managerAccount.addr.toString().toLowerCase()) {
+  if (currentManager !== managerAccount.addr.toString()) {
     throw new Error(
       `Configured manager does not match asset manager ${currentManager} for asset ${assetId}.`
     );

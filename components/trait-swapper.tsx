@@ -6,7 +6,7 @@ import { useWallet } from "@/contexts/wallet-context";
 import { useToast } from "@/contexts/toast-context";
 import { feeConfig } from "@/config/fees";
 import { ALGOD_BASE_URL } from "@/lib/algorand";
-import { mockTraits, mockOwnedNfts } from "@/config/mock-data";
+import { mockTraits } from "@/config/mock-data";
 import { LAYER_ORDER, isOfficialTraitCategory } from "@/lib/nft-layering";
 import type {
   CollectionNft,
@@ -132,22 +132,12 @@ export default function TraitSwapper() {
         const nfts: CollectionNft[] = data.nfts ?? [];
         if (isCancelled) return;
 
-        // If API returns empty (no collection configured), fall back to mock data
-        if (nfts.length === 0) {
-          setOwnedNfts(mockOwnedNfts);
-          setSelectedNft(mockOwnedNfts[0] ?? null);
-        } else {
-          setOwnedNfts(nfts);
-          setSelectedNft(nfts[0] ?? null);
-        }
+        setOwnedNfts(nfts);
+        setSelectedNft(nfts[0] ?? null);
       } catch (err) {
         if (isCancelled) return;
         console.error("Failed to load owned NFTs", err);
-        // Fall back to mock data for demo/development.
-        // For production, remove the mock fallback and set the error instead:
-        //   setNftLoadError("Could not load NFTs from this wallet.");
-        setOwnedNfts(mockOwnedNfts);
-        setSelectedNft(mockOwnedNfts[0] ?? null);
+        setNftLoadError("Could not load NFTs from this wallet.");
       } finally {
         if (!isCancelled) {
           clearTimeout(loadingTimer);

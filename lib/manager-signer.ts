@@ -1,3 +1,4 @@
+import "server-only";
 import algosdk from "algosdk";
 
 /**

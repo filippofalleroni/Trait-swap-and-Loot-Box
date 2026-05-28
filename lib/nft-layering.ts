@@ -8,8 +8,8 @@ export const LAYER_ORDER: OfficialTraitCategory[] = [
   "BACKGROUND",
   "SKIN",
   "BODY",
-  "EYES",
   "MOUTH",
+  "EYES",
   "TOP",
   "COMPANION",
 ];
@@ -51,7 +51,7 @@ export function getTraitLayerImageUrl(
   traitName: string
 ): string {
   const safeName = sanitizeTraitName(traitName);
-  return `/traits/${category}/${safeName}.png`;
+  return `/traits/${category}/${encodeURIComponent(safeName)}.png`;
 }
 
 /**
@@ -67,19 +67,19 @@ export function getTraitLayerImageCandidates(
   const safeName = sanitizeTraitName(traitName);
   return [
     {
-      src: `/traits/${category}/${safeName}.png`,
+      src: `/traits/${category}/${encodeURIComponent(safeName)}.png`,
       key: `${category}-${safeName}-png`,
     },
     {
-      src: `/traits/${category}/${safeName.toLowerCase()}.png`,
+      src: `/traits/${category}/${encodeURIComponent(safeName.toLowerCase())}.png`,
       key: `${category}-${safeName}-lower-png`,
     },
     {
-      src: `/traits/${category}/${safeName.replace(/ /g, "-")}.png`,
+      src: `/traits/${category}/${encodeURIComponent(safeName.replace(/ /g, "-"))}.png`,
       key: `${category}-${safeName}-dashed-png`,
     },
     {
-      src: `/traits/${category}/${safeName.replace(/ /g, "_")}.png`,
+      src: `/traits/${category}/${encodeURIComponent(safeName.replace(/ /g, "_"))}.png`,
       key: `${category}-${safeName}-underscored-png`,
     },
   ];

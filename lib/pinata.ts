@@ -1,3 +1,5 @@
+import "server-only";
+
 /**
  * Server-only helpers to upload files and JSON metadata to IPFS via Pinata.
  *

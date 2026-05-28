@@ -24,6 +24,7 @@ An open-source template for adding **trait swapping** (ARC-19 metadata updates) 
 | Wallets | Pera, Defly, Lute via `@txnlab/use-wallet` |
 | NFT Standard | ARC-19 (mutable metadata via reserve address) |
 | IPFS | Pinata pinning API |
+| Image Composition | sharp (server-side PNG layering) |
 | Smart Contract | TEALScript (commit-reveal with VRF) |
 | Styling | Tailwind CSS |
 | Deployment | Vercel (recommended) or self-hosted |
@@ -130,10 +131,11 @@ Customize these files in the `config/` directory before deploying:
 1. **User connects wallet** and selects an NFT from the collection.
 2. **Browse traits** -- The Trait Lab displays available traits organized by layer category (Background, Skin, Body, Eyes, Mouth, Top, Companion).
 3. **Preview** -- Trait layers are composited client-side as stacked transparent PNGs so the user sees the result before paying.
-4. **Payment** -- The server builds an unsigned payment transaction (user to treasury). The user signs it in their wallet.
-5. **Verify payment** -- The server confirms the payment on-chain via the indexer, checking sender, receiver, and amount. It also verifies the user owns the NFT.
-6. **Update metadata** -- The server uploads new metadata JSON to IPFS via Pinata, computes the ARC-19 reserve address from the new CID, and signs an asset config transaction with the manager wallet to update the ASA's reserve address.
-7. **Done** -- The NFT's on-chain metadata pointer now references updated content. Any ARC-19-aware wallet or explorer displays the new image.
+4. **Payment** -- The server builds an unsigned payment transaction (user to treasury) with a `traitswap:` note prefix for replay prevention. The user signs it in their wallet.
+5. **Verify payment** -- The server confirms the payment on-chain via the indexer, checking sender, receiver, amount, and note prefix. It also verifies the user owns the NFT.
+6. **Compose image** -- The server composites all trait layers into a single PNG using `sharp`, resolving layer images from the local filesystem or deployed URL.
+7. **Update metadata** -- The server uploads the composed image and new metadata JSON to IPFS via Pinata, computes the ARC-19 reserve address from the new CID, and signs an asset config transaction with the manager wallet to update the ASA's reserve address.
+8. **Done** -- The NFT's on-chain metadata pointer now references updated content. Any ARC-19-aware wallet or explorer displays the new image.
 
 Trait removal follows the same flow but clears the trait from the metadata properties instead of adding one.
 
@@ -219,10 +221,10 @@ This lets you develop the UI, test wallet integration, and verify payment flows 
 
 ### Built-In Protections
 
-- **Server-side secrets** -- `MANAGER_MNEMONIC` and `LOOTBOX_MASTER_MNEMONIC` are used only in API routes and server actions. They do not have the `NEXT_PUBLIC_` prefix, so Next.js never bundles them into client-side JavaScript.
+- **Server-side secrets** -- `MANAGER_MNEMONIC` and `LOOTBOX_MASTER_MNEMONIC` are used only in API routes and server actions. They do not have the `NEXT_PUBLIC_` prefix, so Next.js never bundles them into client-side JavaScript. All server-only modules import `"server-only"` as a build-time guard against accidental client bundling.
 - **Payment verification** -- The server verifies every payment on-chain via the indexer with a retry loop (handles indexer lag). Checks sender, receiver, amount, transaction type, and rejects transactions with `rekey-to` or `close-remainder-to` fields. Enforces a maximum transaction age (10 minutes for payments to accommodate crash-recovery retries, 5 minutes for reveal transactions).
 - **NFT ownership verification** -- The mint endpoint confirms the user's wallet actually holds the NFT before applying trait changes.
-- **Transaction replay prevention** -- Used transaction IDs are tracked in memory and rejected if resubmitted. Entries are pruned after one hour. Claimed IDs are released on all error paths so users can retry.
+- **Transaction replay prevention** -- Used transaction IDs are tracked in memory and rejected if resubmitted. Entries are pruned after one hour. Claimed IDs are released on all error paths so users can retry. Payment transactions include a `traitswap:` note prefix to prevent cross-purpose replay between trait swap and loot box payments.
 - **Rate limiting** -- Every API route has per-wallet or per-IP rate limiting with automatic pruning.
 - **SSRF protection** -- Metadata fetching blocks requests to localhost, private IP ranges (10.x, 172.16-31.x, 192.168.x), IPv6 loopback, cloud metadata endpoints (169.254.169.254), and `.local`/`.internal`/`.localhost` hostnames.
 - **Admin authentication** -- Admin access requires signing a challenge nonce with Ed25519 signature verification. The challenge transaction is validated for type (payment), zero amount, self-payment, and absence of rekey/close fields. Sessions expire after 1 hour.
@@ -325,6 +327,7 @@ lib/
   lootbox-prize-resolver.ts         Weighted random prize selection
   lootbox-prize-store.ts            Load prizes from Vercel Blob or config
   manager-signer.ts                 Load manager wallet from env mnemonic
+  nft-compose.ts                    Server-side image composition (sharp)
   nft-layering.ts                   Layer order + trait name sanitization
   pinata.ts                         IPFS upload via Pinata
   security.ts                       SSRF hostname blocklist for metadata fetching
@@ -360,7 +363,6 @@ Contributions are welcome.
 
 - Unit tests for prize resolution and ARC-19 address computation
 - Persistent transaction replay protection (database-backed)
-- Server-side image composition for layered PFP trait images
 - Database-backed trait registry (replacing `mock-data.ts`)
 - Support for ARC-69 metadata in addition to ARC-19
 - Additional wallet support (Exodus, WalletConnect v2)
