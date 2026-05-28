@@ -238,7 +238,7 @@ This lets you develop the UI, test wallet integration, and verify payment flows 
 - **Contract-enforced payment** -- The smart contract's `commit()` method verifies the preceding payment in the atomic group (correct receiver, amount, sender). No one can commit without paying. A second commit is rejected if the sender already has an active commit box, preventing silent payment loss.
 - **Atomic group verification** -- In live mode, the commit transaction group (payment + app call) is built server-side with `assignGroupID`. The reveal route verifies the on-chain reveal transaction's app ID, sender, and ABI method selector.
 
-### Production Hardening Recommendations
+### Production Recommendations
 
 - **Persistent replay protection** -- The in-memory transaction ID set resets on server restart. For production, store used transaction IDs in a database (Redis, Vercel KV, Supabase).
 - **Prize locking** -- Implement a lock-distribute-confirm pattern with database persistence to handle partial failures during prize distribution.
