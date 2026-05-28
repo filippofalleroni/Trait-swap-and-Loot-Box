@@ -5,6 +5,7 @@ import { getAlgodClient } from "@/lib/algorand";
 import { getTreasuryAddress } from "@/lib/treasury";
 import { feeConfig } from "@/config/fees";
 import { mockTraits } from "@/config/mock-data";
+import { TRAIT_ID_REGEX } from "@/lib/types";
 
 const PAYMENT_NOTE_PREFIX = "traitswap:";
 
@@ -104,8 +105,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate traitId format: alphanumeric, hyphens, underscores only (max 100 chars)
-    if (!/^[a-zA-Z0-9_-]{1,100}$/.test(newTraitId)) {
+    if (!TRAIT_ID_REGEX.test(newTraitId)) {
       return NextResponse.json(
         { error: "Invalid trait ID format." },
         { status: 400 }

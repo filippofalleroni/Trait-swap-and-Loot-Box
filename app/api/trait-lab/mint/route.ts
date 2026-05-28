@@ -10,6 +10,7 @@ import { composeNftImage } from "@/lib/nft-compose";
 import { mockTraits } from "@/config/mock-data";
 import { feeConfig } from "@/config/fees";
 import type { NftMetadata, OfficialTraitCategory } from "@/lib/types";
+import { TRAIT_ID_REGEX } from "@/lib/types";
 import { LAYER_ORDER, isOfficialTraitCategory } from "@/lib/nft-layering";
 import { isBlockedHostname } from "@/lib/security";
 
@@ -93,7 +94,7 @@ function pruneUsedMintTxIds() {
 
 export async function POST(request: NextRequest) {
   let claimedTxId: string | null = null;
-  let ipfsUploaded = false;
+  let paymentVerified = false;
 
   try {
     if (!isPinataConfigured()) {
@@ -171,8 +172,7 @@ export async function POST(request: NextRequest) {
     usedMintTxTimestamps.set(paymentTxId, Date.now());
     claimedTxId = paymentTxId;
 
-    // Validate traitId format: alphanumeric, hyphens, underscores only (max 100 chars)
-    if (!/^[a-zA-Z0-9_-]{1,100}$/.test(newTraitId)) {
+    if (!TRAIT_ID_REGEX.test(newTraitId)) {
       usedMintTxIds.delete(paymentTxId);
       usedMintTxTimestamps.delete(paymentTxId);
       return NextResponse.json(
@@ -229,14 +229,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    paymentVerified = true;
+
     const ownershipValid = await verifyOwnership({
       assetId: nftAssetId,
       walletAddress,
     });
 
     if (!ownershipValid) {
-      usedMintTxIds.delete(paymentTxId);
-      usedMintTxTimestamps.delete(paymentTxId);
       return NextResponse.json(
         { error: "Wallet does not own this NFT" },
         { status: 403 }
@@ -252,8 +252,6 @@ export async function POST(request: NextRequest) {
         : null;
 
     if (!category) {
-      usedMintTxIds.delete(paymentTxId);
-      usedMintTxTimestamps.delete(paymentTxId);
       return NextResponse.json(
         { error: "Invalid trait category" },
         { status: 400 }
@@ -282,10 +280,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Prevent concurrent updates to the same NFT (single-instance guard)
     if (activeUpdates.has(nftAssetId)) {
-      usedMintTxIds.delete(paymentTxId);
-      usedMintTxTimestamps.delete(paymentTxId);
       return NextResponse.json(
         { error: "This NFT is already being updated. Please wait and try again." },
         { status: 409 }
@@ -297,8 +292,6 @@ export async function POST(request: NextRequest) {
       const currentMetadata = await fetchCurrentMetadata(nftAssetId);
 
       if (!currentMetadata) {
-        usedMintTxIds.delete(paymentTxId);
-        usedMintTxTimestamps.delete(paymentTxId);
         return NextResponse.json(
           { error: "Could not load NFT metadata. Please try again." },
           { status: 503 }
@@ -337,7 +330,6 @@ export async function POST(request: NextRequest) {
       };
 
       const newCid = await uploadJsonToIpfs(newMetadata as unknown as Record<string, unknown>);
-      ipfsUploaded = true;
       const newReserveAddress = computeArc19ReserveAddress(newCid);
 
       const managerAccount = getManagerAccount();
@@ -346,6 +338,10 @@ export async function POST(request: NextRequest) {
         newReserveAddress,
         managerAccount,
       });
+
+      console.log(
+        `[trait-lab/mint] OK wallet=${walletAddress} asset=${nftAssetId} trait=${newTraitId} payTx=${paymentTxId} updateTx=${updateTxId ?? "N/A"}`
+      );
 
       return NextResponse.json({
         status: "submitted" as const,
@@ -357,10 +353,10 @@ export async function POST(request: NextRequest) {
       activeUpdates.delete(nftAssetId);
     }
   } catch (err) {
-    // Only release the txId if we haven't started writing (IPFS upload).
-    // After IPFS upload, the on-chain update may have partially applied,
-    // so the txId must stay claimed to prevent double-spending.
-    if (claimedTxId && !ipfsUploaded) {
+    // Only release the txId if payment was NOT yet verified on-chain.
+    // Once verified, the payment is consumed — keeping it claimed prevents
+    // the same on-chain payment from being reused with different parameters.
+    if (claimedTxId && !paymentVerified) {
       usedMintTxIds.delete(claimedTxId);
       usedMintTxTimestamps.delete(claimedTxId);
     }
@@ -392,7 +388,7 @@ async function verifyPayment({
   expectedAmountAlgo: number;
 }): Promise<{ ok: boolean; reason?: string }> {
   const MAX_ATTEMPTS = 20;
-  const RETRY_DELAY_MS = 3000;
+  const BASE_DELAY_MS = 3000;
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     try {
@@ -450,12 +446,18 @@ async function verifyPayment({
       if (paymentDetails.amount < expectedMicroAlgo) {
         return { ok: false, reason: "Insufficient payment amount" };
       }
+      if (paymentDetails.amount > expectedMicroAlgo * 2) {
+        return { ok: false, reason: "Payment amount too high — possible user error" };
+      }
 
       const roundTime = txn["round-time"];
       if (!roundTime || roundTime <= 0) {
         return { ok: false, reason: "Transaction missing round time" };
       }
       const txAge = Math.floor(Date.now() / 1000) - roundTime;
+      if (txAge < 0) {
+        return { ok: false, reason: "Transaction round time is in the future" };
+      }
       if (txAge > 300) {
         return { ok: false, reason: "Transaction is too old. Please submit a new payment" };
       }
@@ -479,7 +481,7 @@ async function verifyPayment({
 
     // Wait before retrying
     await new Promise(function (resolve) {
-      setTimeout(resolve, RETRY_DELAY_MS);
+      setTimeout(resolve, BASE_DELAY_MS + Math.random() * 1000);
     });
   }
 

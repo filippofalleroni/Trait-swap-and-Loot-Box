@@ -1,3 +1,5 @@
+export const TRAIT_ID_REGEX = /^[a-zA-Z0-9_-]{1,100}$/;
+
 export type TraitCategory = string;
 
 export type OfficialTraitCategory =

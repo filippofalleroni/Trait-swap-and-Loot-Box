@@ -115,6 +115,8 @@ const SAFE_ERRORS = new Set([
   "Reveal transaction does not call the reveal() method.",
   "Reveal transaction is too old. Please try again.",
   "Reveal transaction has no ABI return value.",
+  "Transaction round time is in the future",
+  "Reveal transaction round time is in the future.",
 ]);
 
 function safeErrorMessage(error: unknown): string {
@@ -411,9 +413,10 @@ async function verifyPayment(
   expectedAmountMicroAlgo: number
 ): Promise<{ ok: boolean; reason?: string; group?: string }> {
   const MAX_RETRIES = 12;
-  const RETRY_DELAY_MS = 2000;
+  const BASE_DELAY_MS = 2000;
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const delay = BASE_DELAY_MS + Math.random() * 1000;
     try {
       const indexerUrl = `${INDEXER_BASE_URL}/v2/transactions/${txId}`;
       const res = await fetch(indexerUrl);
@@ -421,7 +424,7 @@ async function verifyPayment(
       if (!res.ok) {
         if (attempt < MAX_RETRIES - 1) {
           await new Promise(function (resolve) {
-            setTimeout(resolve, RETRY_DELAY_MS);
+            setTimeout(resolve, delay);
           });
           continue;
         }
@@ -433,14 +436,14 @@ async function verifyPayment(
       if (!txn || !txn["confirmed-round"]) {
         if (attempt < MAX_RETRIES - 1) {
           await new Promise(function (resolve) {
-            setTimeout(resolve, RETRY_DELAY_MS);
+            setTimeout(resolve, delay);
           });
           continue;
         }
         return { ok: false, reason: "Payment transaction not confirmed. Please try again." };
       }
 
-      if (txn.sender?.toLowerCase() !== expectedSender.toLowerCase()) {
+      if (txn.sender !== expectedSender) {
         return { ok: false, reason: "Payment sender does not match connected wallet." };
       }
 
@@ -454,7 +457,7 @@ async function verifyPayment(
       }
 
       const paymentDetails = txn["payment-transaction"];
-      if (!paymentDetails || paymentDetails.receiver?.toLowerCase() !== expectedReceiver.toLowerCase()) {
+      if (!paymentDetails || paymentDetails.receiver !== expectedReceiver) {
         return { ok: false, reason: "Payment was not sent to the treasury address." };
       }
 
@@ -469,13 +472,14 @@ async function verifyPayment(
         };
       }
 
-      // 10-minute window: the normal flow (commit → 9 rounds → reveal → server)
-      // takes ~60s, but crash-recovery retries can resubmit minutes later.
       const roundTime = txn["round-time"];
       if (!roundTime || roundTime <= 0) {
         return { ok: false, reason: "Transaction missing round time" };
       }
       const txAge = Math.floor(Date.now() / 1000) - roundTime;
+      if (txAge < 0) {
+        return { ok: false, reason: "Transaction round time is in the future" };
+      }
       if (txAge > MAX_PAYMENT_AGE_SECONDS) {
         return { ok: false, reason: "Transaction is too old. Please submit a new payment." };
       }
@@ -486,7 +490,7 @@ async function verifyPayment(
     } catch (err) {
       if (attempt < MAX_RETRIES - 1) {
         await new Promise(function (resolve) {
-          setTimeout(resolve, RETRY_DELAY_MS);
+          setTimeout(resolve, delay);
         });
         continue;
       }
@@ -508,9 +512,10 @@ async function verifyRevealTransaction(
   expectedAppId: number
 ): Promise<{ returnValue: bigint }> {
   const MAX_RETRIES = 10;
-  const RETRY_DELAY_MS = 2000;
+  const BASE_DELAY_MS = 2000;
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const delay = BASE_DELAY_MS + Math.random() * 1000;
     try {
       const indexerUrl = `${INDEXER_BASE_URL}/v2/transactions/${txId}`;
       const res = await fetch(indexerUrl);
@@ -518,7 +523,7 @@ async function verifyRevealTransaction(
       if (!res.ok) {
         if (attempt < MAX_RETRIES - 1) {
           await new Promise(function (resolve) {
-            setTimeout(resolve, RETRY_DELAY_MS);
+            setTimeout(resolve, delay);
           });
           continue;
         }
@@ -530,7 +535,7 @@ async function verifyRevealTransaction(
       if (!txn || !txn["confirmed-round"]) {
         if (attempt < MAX_RETRIES - 1) {
           await new Promise(function (resolve) {
-            setTimeout(resolve, RETRY_DELAY_MS);
+            setTimeout(resolve, delay);
           });
           continue;
         }
@@ -546,7 +551,7 @@ async function verifyRevealTransaction(
         throw new Error("Reveal transaction targets wrong contract.");
       }
 
-      if (txn.sender?.toLowerCase() !== expectedSender.toLowerCase()) {
+      if (txn.sender !== expectedSender) {
         throw new Error("Reveal sender does not match wallet.");
       }
 
@@ -565,6 +570,9 @@ async function verifyRevealTransaction(
         throw new Error("Reveal transaction missing round time.");
       }
       const txAge = Math.floor(Date.now() / 1000) - roundTime;
+      if (txAge < 0) {
+        throw new Error("Reveal transaction round time is in the future.");
+      }
       if (txAge > MAX_REVEAL_AGE_SECONDS) {
         throw new Error("Reveal transaction is too old. Please try again.");
       }
@@ -591,7 +599,7 @@ async function verifyRevealTransaction(
       }
       if (attempt < MAX_RETRIES - 1) {
         await new Promise(function (resolve) {
-          setTimeout(resolve, RETRY_DELAY_MS);
+          setTimeout(resolve, delay);
         });
         continue;
       }

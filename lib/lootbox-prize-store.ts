@@ -30,6 +30,7 @@ function validatePrizes(data: unknown[]): PrizeTier[] | null {
     if (typeof p.rarity !== "string" || !VALID_RARITIES.has(p.rarity)) return null;
     if (typeof p.color !== "string") return null;
     if (typeof p.assetId !== "number" || !Number.isFinite(p.assetId) || p.assetId < 0) return null;
+    if (p.assetId === 0 && p.type !== "token") return null;
     if (typeof p.amount !== "number" || !Number.isFinite(p.amount) || p.amount <= 0) return null;
     if (typeof p.weight !== "number" || !Number.isFinite(p.weight) || p.weight <= 0) return null;
   }
