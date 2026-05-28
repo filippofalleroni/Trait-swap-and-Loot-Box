@@ -82,6 +82,12 @@ class LootBoxCommitReveal extends Contract {
     return randomValue;
   }
 
+  // Note: Since the prize table and selection logic are public, a user
+  // could simulate their reveal outcome before calling reveal(). If the
+  // result is unfavorable they can let the commit expire and reclaim
+  // instead. The crate price is still lost (paid atomically with commit),
+  // so each skip costs the full price — but it does let users avoid
+  // claiming unwanted prizes. This is an accepted design tradeoff.
   reclaim(): void {
     const committed = this.commitRound(this.txn.sender).value;
     assert(globals.round >= committed + EXPIRY_ROUNDS, "Commit has not expired yet");
