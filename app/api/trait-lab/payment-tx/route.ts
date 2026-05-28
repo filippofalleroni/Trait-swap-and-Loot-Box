@@ -133,7 +133,12 @@ export async function POST(request: NextRequest) {
       priceAlgo = trait.priceAlgo;
     }
 
-    // Convert ALGO to microALGO
+    if (!Number.isFinite(priceAlgo) || priceAlgo <= 0) {
+      return NextResponse.json(
+        { error: "Invalid price configuration." },
+        { status: 500 }
+      );
+    }
     const amountMicroAlgo = Math.round(priceAlgo * 1_000_000);
     if (amountMicroAlgo <= 0) {
       return NextResponse.json(

@@ -203,7 +203,7 @@ export async function POST(request: NextRequest) {
       ? feeConfig.removalFeeAlgo
       : trait?.priceAlgo;
 
-    if (expectedAmountAlgo === undefined || expectedAmountAlgo <= 0) {
+    if (expectedAmountAlgo === undefined || !Number.isFinite(expectedAmountAlgo) || expectedAmountAlgo <= 0) {
       usedMintTxIds.delete(paymentTxId);
       usedMintTxTimestamps.delete(paymentTxId);
       return NextResponse.json(
@@ -456,7 +456,7 @@ async function verifyPayment({
       }
       const txAge = Math.floor(Date.now() / 1000) - roundTime;
       if (txAge < 0) {
-        return { ok: false, reason: "Transaction round time is in the future" };
+        return { ok: false, reason: "Transaction round time is in the future." };
       }
       if (txAge > 300) {
         return { ok: false, reason: "Transaction is too old. Please submit a new payment" };
@@ -518,7 +518,7 @@ async function fetchCurrentMetadata(
 ): Promise<NftMetadata | null> {
   try {
     const indexerUrl = `${INDEXER_BASE_URL}/v2/assets/${assetId}`;
-    const res = await fetch(indexerUrl);
+    const res = await fetch(indexerUrl, { signal: AbortSignal.timeout(10000) });
 
     if (!res.ok) return null;
 

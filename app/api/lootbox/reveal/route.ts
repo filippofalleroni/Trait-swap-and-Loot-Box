@@ -115,7 +115,7 @@ const SAFE_ERRORS = new Set([
   "Reveal transaction does not call the reveal() method.",
   "Reveal transaction is too old. Please try again.",
   "Reveal transaction has no ABI return value.",
-  "Transaction round time is in the future",
+  "Transaction round time is in the future.",
   "Reveal transaction round time is in the future.",
 ]);
 
@@ -478,7 +478,7 @@ async function verifyPayment(
       }
       const txAge = Math.floor(Date.now() / 1000) - roundTime;
       if (txAge < 0) {
-        return { ok: false, reason: "Transaction round time is in the future" };
+        return { ok: false, reason: "Transaction round time is in the future." };
       }
       if (txAge > MAX_PAYMENT_AGE_SECONDS) {
         return { ok: false, reason: "Transaction is too old. Please submit a new payment." };
@@ -561,7 +561,7 @@ async function verifyRevealTransaction(
       }
 
       const appArgs = appCallDetails["application-args"] as string[] | undefined;
-      if (!appArgs || appArgs.length === 0 || appArgs[0] !== REVEAL_SELECTOR_B64) {
+      if (!appArgs || appArgs.length !== 1 || appArgs[0] !== REVEAL_SELECTOR_B64) {
         throw new Error("Reveal transaction does not call the reveal() method.");
       }
 
