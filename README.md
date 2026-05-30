@@ -219,32 +219,34 @@ This lets you develop the UI, test wallet integration, and verify payment flows 
 
 ## Security
 
-### Built-In Protections
+### Payment & Transaction Safety
 
-- **Server-side secrets** -- `MANAGER_MNEMONIC` and `LOOTBOX_MASTER_MNEMONIC` are used only in API routes and server actions. They do not have the `NEXT_PUBLIC_` prefix, so Next.js never bundles them into client-side JavaScript. All server-only modules import `"server-only"` as a build-time guard against accidental client bundling.
-- **Payment verification** -- The server verifies every payment on-chain via the indexer with a jittered retry loop (handles indexer lag). Checks sender, receiver, amount, transaction type, and rejects transactions with `rekey-to` or `close-remainder-to` fields. Rejects future-dated transactions, overpayments exceeding 2× the expected amount, and transactions older than the allowed window (10 minutes for payments, 5 minutes for reveals).
-- **NFT ownership verification** -- The mint endpoint confirms the user's wallet actually holds the NFT before applying trait changes.
-- **Transaction replay prevention** -- Used transaction IDs are tracked in memory and rejected if resubmitted. Entries are pruned after one hour. Claimed IDs are released on pre-payment error paths so users can retry, but once payment is verified on-chain the ID stays claimed permanently. Payment transactions include a `traitswap:` note prefix to prevent cross-purpose replay between trait swap and loot box payments.
-- **Rate limiting** -- Every API route has per-wallet or per-IP rate limiting with automatic pruning.
-- **SSRF protection** -- Metadata fetching blocks requests to localhost, private IP ranges (10.x, 172.16-31.x, 192.168.x), IPv6 loopback, cloud metadata endpoints (169.254.169.254), and `.local`/`.internal`/`.localhost` hostnames.
-- **Admin authentication** -- Admin access requires signing a challenge nonce with Ed25519 signature verification. The challenge transaction is validated for type (payment), zero amount, self-payment, and absence of rekey/close fields. Sessions expire after 1 hour.
-- **Input validation** -- Price values are validated with `Number.isFinite()`. Trait IDs are checked against a shared regex. Indexer fetches enforce a 10-second timeout. The reveal route validates `appArgs` length and method selector before processing.
-- **Safe error messages** -- API routes return only pre-approved error strings to the client, preventing internal details from leaking.
-- **Path traversal protection** -- Trait names are sanitized before constructing layer image URLs, stripping `../`, `/`, `\`, `:`, and null bytes.
-- **Wallet separation** -- The template recommends using separate wallets for the manager (metadata authority) and the master (prize pool), limiting blast radius if a key is compromised.
-- **Crash recovery** -- If the browser closes or refreshes mid-flow, the pending reveal state is persisted in `sessionStorage`. On reload the UI resumes from where the user left off (VRF wait or server reveal), so committed ALGO is not lost.
-- **Loot box pause switch** -- Set `LOOTBOX_PAUSED=true` to immediately halt new commits and reveals without redeploying.
-- **On-chain randomness** -- In live mode, randomness is generated entirely by the smart contract via VRF seed extraction. The server reads the ABI return value from the confirmed reveal transaction -- it never touches the VRF seed directly. There is no fallback to server-side `crypto.randomBytes` in live mode.
-- **Contract-enforced payment** -- The smart contract's `commit()` method verifies the preceding payment in the atomic group (correct receiver, amount, sender). No one can commit without paying. A second commit is rejected if the sender already has an active commit box, preventing silent payment loss.
-- **Atomic group verification** -- In live mode, the commit transaction group (payment + app call) is built server-side with `assignGroupID`. The reveal route verifies the on-chain reveal transaction's app ID, sender, and ABI method selector.
+Every payment is verified on-chain via the indexer before proceeding. The server checks sender, receiver, amount, transaction type, note prefix, and age. Transactions with `rekey-to` or `close-remainder-to` fields are rejected. Overpayments (>2x expected) are flagged. The loot box smart contract independently verifies the payment in the atomic group, so no one can commit without paying.
+
+Trait swap and loot box payments use different note prefixes (`traitswap:` and `lootbox:`) so one cannot be replayed as the other. Used transaction IDs are tracked and rejected on resubmission.
+
+### Randomness
+
+In live mode, randomness is generated entirely on-chain by the smart contract using the Algorand VRF block seed. The server reads the result from the confirmed reveal transaction's ABI return value -- it never touches the VRF seed directly. There is no server-side randomness fallback in live mode.
+
+### Reliability
+
+If the browser closes mid-flow, pending state is saved to `localStorage`. On return the UI resumes from where the user left off -- VRF wait, reveal signing, or server distribution. Prize distribution retries up to 3 times with delays between attempts. If a trait swap fails after payment (e.g. IPFS timeout), the transaction ID is released so the user can retry with the same payment.
+
+### Server-Side Security
+
+All wallet mnemonics (`MANAGER_MNEMONIC`, `LOOTBOX_MASTER_MNEMONIC`) are used only in server routes and never bundled into client JavaScript. Every server module that handles secrets imports `"server-only"` as a build-time guard. API routes have per-wallet and per-IP rate limiting. Metadata fetching blocks SSRF attempts against localhost, private IPs, and cloud metadata endpoints. Error messages are mapped to user-friendly text before returning to the client.
+
+### Admin Panel
+
+Admin access requires signing a challenge nonce with the wallet's Ed25519 key. The signed transaction is validated for type, zero amount, self-payment, and absence of rekey/close fields. Sessions expire after 1 hour.
 
 ### Production Recommendations
 
-- **Persistent replay protection** -- The in-memory transaction ID set resets on server restart. For production, store used transaction IDs in a database (Redis, Vercel KV, Supabase).
-- **Prize locking** -- Implement a lock-distribute-confirm pattern with database persistence to handle partial failures during prize distribution.
+- **Persistent replay protection** -- The in-memory transaction ID set resets on server restart. For production, store used IDs in Redis, Vercel KV, or a database.
+- **Prize locking** -- Implement a lock-distribute-confirm pattern with database persistence to handle partial distribution failures.
 - **Session persistence** -- Admin sessions are in-memory. Use encrypted httpOnly cookies or a session store for production.
-- **Commit box cleanup** -- Commit boxes are deleted automatically when `reveal()` succeeds. For abandoned commits (user commits but never reveals), expired entries can be cleaned via `reclaim()` after 900 rounds. Consider a periodic cleanup script for high-traffic deployments.
-- **Persistent rate limiting** -- The in-memory rate limiters reset on restart. Use edge middleware or a distributed rate limiter (Redis, Vercel KV) for production.
+- **Persistent rate limiting** -- The in-memory rate limiters reset on restart. Use edge middleware or a distributed store for production.
 - **Smart contract audit** -- The included contract is a reference implementation. Have it reviewed before deploying with real funds.
 
 ---
