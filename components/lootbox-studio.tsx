@@ -96,7 +96,7 @@ export default function LootboxStudio() {
     () => {
       if (typeof window === "undefined") return null;
       try {
-        const stored = sessionStorage.getItem(PENDING_KEY);
+        const stored = localStorage.getItem(PENDING_KEY);
         return stored ? JSON.parse(stored) : null;
       } catch {
         return null;
@@ -111,12 +111,12 @@ export default function LootboxStudio() {
   useEffect(() => {
     try {
       if (pendingReveal) {
-        sessionStorage.setItem(PENDING_KEY, JSON.stringify(pendingReveal));
+        localStorage.setItem(PENDING_KEY, JSON.stringify(pendingReveal));
       } else {
-        sessionStorage.removeItem(PENDING_KEY);
+        localStorage.removeItem(PENDING_KEY);
       }
     } catch {
-      // sessionStorage not available
+      // localStorage not available
     }
   }, [pendingReveal]);
 

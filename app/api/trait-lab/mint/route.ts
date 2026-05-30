@@ -360,6 +360,18 @@ export async function POST(request: NextRequest) {
       usedMintTxIds.delete(claimedTxId);
       usedMintTxTimestamps.delete(claimedTxId);
     }
+    // If payment was verified but composition/upload/ARC-19 failed due to
+    // a transient issue, un-burn the txId so the user can retry.
+    if (paymentVerified && claimedTxId) {
+      const raw = err instanceof Error ? err.message : "";
+      const isUserError =
+        raw.includes("does not own") ||
+        raw.includes("Invalid trait");
+      if (!isUserError) {
+        usedMintTxIds.delete(claimedTxId);
+        usedMintTxTimestamps.delete(claimedTxId);
+      }
+    }
     console.error("[trait-lab/mint] Error:", err);
     return NextResponse.json(
       { error: "Mint process failed. Please try again." },

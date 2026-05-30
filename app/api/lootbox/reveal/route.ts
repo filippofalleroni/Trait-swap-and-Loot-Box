@@ -90,41 +90,45 @@ function pruneUsedTxIds() {
   });
 }
 
-const SAFE_ERRORS = new Set([
-  "A valid wallet address is required.",
-  "A payment transaction ID is required.",
-  "A reveal transaction ID is required.",
-  "Invalid transaction ID format.",
-  "This transaction has already been used.",
-  "Payment sender does not match connected wallet.",
-  "Payment was not sent to the treasury address.",
-  "Transaction is not a payment transaction.",
-  "Transaction contains a rekey field and is rejected.",
-  "Transaction contains a close-remainder-to field and is rejected.",
-  "Transaction is too old. Please submit a new payment.",
-  "Loot box is temporarily paused.",
-  "No prizes are currently available.",
-  "Payment amount is insufficient.",
-  "Payment transaction not confirmed. Please try again.",
-  "Payment must be part of a commit transaction group.",
-  "Reveal transaction not confirmed. Please try again.",
-  "Reveal transaction is not an application call.",
-  "Reveal transaction targets wrong contract.",
-  "Reveal sender does not match wallet.",
-  "Reveal transaction has unexpected on-completion type.",
-  "Reveal transaction does not call the reveal() method.",
-  "Reveal transaction is too old. Please try again.",
-  "Reveal transaction has no ABI return value.",
-  "Transaction round time is in the future.",
-  "Reveal transaction round time is in the future.",
-]);
+const SAFE_ERROR_MAP: Record<string, string> = {
+  "A valid wallet address is required.": "A valid wallet address is required.",
+  "A payment transaction ID is required.": "A payment transaction ID is required.",
+  "A reveal transaction ID is required.": "A reveal transaction ID is required.",
+  "Invalid transaction ID format.": "Invalid transaction ID format.",
+  "This transaction has already been used.": "This transaction has already been used.",
+  "Payment sender does not match connected wallet.": "Payment does not match your connected wallet.",
+  "Payment was not sent to the treasury address.": "Payment was sent to the wrong address. Please try again.",
+  "Transaction is not a payment transaction.": "Invalid transaction type. Please try again.",
+  "Transaction contains a rekey field and is rejected.": "Transaction rejected for security reasons.",
+  "Transaction contains a close-remainder-to field and is rejected.": "Transaction rejected for security reasons.",
+  "Transaction is too old. Please submit a new payment.": "Payment has expired. Please open a new loot box.",
+  "Loot box is temporarily paused.": "Loot box is temporarily paused.",
+  "No prizes are currently available.": "No prizes are currently available. Please try again later.",
+  "Payment transaction not confirmed. Please try again.": "Payment could not be confirmed yet. Please wait a moment and try again.",
+  "Payment must be part of a commit transaction group.": "Invalid payment format. Please try again.",
+  "Reveal transaction not confirmed. Please try again.": "Reveal could not be confirmed yet. Please wait a moment and try again.",
+  "Reveal transaction is not an application call.": "Invalid reveal transaction. Please try again.",
+  "Reveal transaction targets wrong contract.": "Reveal targeted the wrong contract. Please try again.",
+  "Reveal sender does not match wallet.": "Reveal does not match your connected wallet.",
+  "Reveal transaction has unexpected on-completion type.": "Invalid reveal transaction type.",
+  "Reveal transaction does not call the reveal() method.": "Invalid reveal method call.",
+  "Reveal transaction is too old. Please try again.": "Reveal has expired. Please try again.",
+  "Reveal transaction has no ABI return value.": "Reveal did not return a result. Please try again.",
+  "Transaction round time is in the future.": "Payment timestamp is invalid. Please try again.",
+  "Reveal transaction round time is in the future.": "Reveal timestamp is invalid. Please try again.",
+  "Master wallet has insufficient balance for this prize.": "This prize is temporarily out of stock. Please contact support.",
+};
 
 function safeErrorMessage(error: unknown): string {
-  if (error instanceof Error && SAFE_ERRORS.has(error.message)) {
-    return error.message;
+  if (error instanceof Error) {
+    const mapped = SAFE_ERROR_MAP[error.message];
+    if (mapped) return mapped;
   }
   if (error instanceof Error && error.message.startsWith("Payment amount")) {
     return "Payment amount is insufficient.";
+  }
+  if (error instanceof Error && error.message.includes("opted into")) {
+    return error.message;
   }
   return "Loot box reveal failed. Please try again.";
 }

@@ -117,15 +117,33 @@ export async function distributePrize({
     });
   }
 
-  const signedTxn = txn.signTxn(masterAccount.sk);
-  const { txid } = await algodClient.sendRawTransaction(signedTxn).do();
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const sp = attempt === 0 ? suggestedParams : await algodClient.getTransactionParams().do();
+      const retryTxn = attempt === 0 ? txn : (() => {
+        if (prize.assetId === 0) {
+          return algosdk.makePaymentTxnWithSuggestedParamsFromObject({
+            sender: masterAddr, receiver: recipientAddress, amount: prize.amount, suggestedParams: sp, note,
+          });
+        }
+        return algosdk.makeAssetTransferTxnWithSuggestedParamsFromObject({
+          sender: masterAddr, receiver: recipientAddress, assetIndex: prize.assetId,
+          amount: prize.type === "nft" ? 1 : prize.amount, suggestedParams: sp, note,
+        });
+      })();
+      const signedTxn = retryTxn.signTxn(masterAccount.sk);
+      const { txid } = await algodClient.sendRawTransaction(signedTxn).do();
+      await algosdk.waitForConfirmation(algodClient, txid as string, 10);
+      return txid as string;
+    } catch (error) {
+      lastError = error;
+      if (attempt < 2) {
+        console.warn(`[lootbox-distributor] Attempt ${attempt + 1} failed, retrying...`, error);
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+    }
+  }
 
-  // Wait for confirmation
-  await algosdk.waitForConfirmation(algodClient, txid, 4);
-
-  console.log(
-    `[lootbox-distributor] Prize "${prize.name}" (${prize.type}) distributed (txId: ${txid})`
-  );
-
-  return txid;
+  throw lastError;
 }

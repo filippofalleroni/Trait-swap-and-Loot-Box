@@ -94,7 +94,7 @@ export default function TraitSwapper() {
   // Restore pending payment from sessionStorage on mount
   useEffect(() => {
     try {
-      const raw = sessionStorage.getItem("traitswap_pending_tx");
+      const raw = localStorage.getItem("traitswap_pending_tx");
       if (!raw) return;
       const parsed = JSON.parse(raw) as { txId?: string; wallet?: string };
       if (parsed.txId) {
@@ -173,12 +173,12 @@ export default function TraitSwapper() {
   useEffect(() => {
     try {
       if (pendingPaymentTxId) {
-        sessionStorage.setItem("traitswap_pending_tx", JSON.stringify({
+        localStorage.setItem("traitswap_pending_tx", JSON.stringify({
           txId: pendingPaymentTxId,
           wallet: pendingPaymentWallet,
         }));
       } else {
-        sessionStorage.removeItem("traitswap_pending_tx");
+        localStorage.removeItem("traitswap_pending_tx");
       }
     } catch { /* sessionStorage unavailable */ }
   }, [pendingPaymentTxId, pendingPaymentWallet]);
