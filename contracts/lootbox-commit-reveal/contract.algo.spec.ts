@@ -65,7 +65,7 @@ describe('LootBoxCommitReveal', () => {
         .execute(() => {
           contract.commit(payment)
         })
-      expect(contract.commitRound(user).exists).toBe(true)
+      expect(contract.commitTarget(user).exists).toBe(true)
     })
 
     it('rejects an underpayment', () => {
@@ -104,7 +104,7 @@ describe('LootBoxCommitReveal', () => {
     it('rejects a second active commit', () => {
       const { contract, treasury } = deploy()
       const user = ctx.defaultSender
-      contract.commitRound(user).value = Uint64(100)
+      contract.commitTarget(user).value = Uint64(100)
       const payment = ctx.any.txn.payment({ sender: user, receiver: treasury, amount: Uint64(PRICE) })
       ctx.txn
         .createScope([payment, ctx.any.txn.applicationCall({ appId: contract, sender: user })], 1)
@@ -115,7 +115,8 @@ describe('LootBoxCommitReveal', () => {
   })
 
   describe('reveal guards', () => {
-    // target = (committed / cadence + 2) * cadence; for committed=1000, cadence=8 => 1016
+    // The box stores the locked target beacon round; reveal is valid in
+    // (target, target + REVEAL_WINDOW).
     it('rejects with no active commit', () => {
       const { contract } = deploy()
       expect(() => contract.reveal()).toThrow(/No active commit/)
@@ -123,14 +124,14 @@ describe('LootBoxCommitReveal', () => {
 
     it('rejects before the target beacon round', () => {
       const { contract } = deploy()
-      contract.commitRound(ctx.defaultSender).value = Uint64(1000)
-      ctx.ledger.patchGlobalData({ round: Uint64(1010) }) // < target 1016
+      contract.commitTarget(ctx.defaultSender).value = Uint64(2000) // target in the future
+      ctx.ledger.patchGlobalData({ round: Uint64(1000) }) // < target
       expect(() => contract.reveal()).toThrow(/not reached yet/)
     })
 
-    it('rejects an expired commit', () => {
+    it('rejects an expired commit (past target + window)', () => {
       const { contract } = deploy()
-      contract.commitRound(ctx.defaultSender).value = Uint64(1000)
+      contract.commitTarget(ctx.defaultSender).value = Uint64(1000) // target
       ctx.ledger.patchGlobalData({ round: Uint64(1000 + EXPIRY) })
       expect(() => contract.reveal()).toThrow(/expired/)
     })
@@ -145,7 +146,7 @@ describe('LootBoxCommitReveal', () => {
     it('rejects a commit that has not expired', () => {
       const { contract } = deploy()
       const user = ctx.any.account()
-      contract.commitRound(user).value = Uint64(1000)
+      contract.commitTarget(user).value = Uint64(1000)
       ctx.ledger.patchGlobalData({ round: Uint64(1000 + EXPIRY - 1) })
       expect(() => contract.reclaim(user)).toThrow(/has not expired/)
     })
@@ -153,10 +154,10 @@ describe('LootBoxCommitReveal', () => {
     it('deletes an expired commit (permissionless — caller is not the box owner)', () => {
       const { contract } = deploy()
       const user = ctx.any.account() // box owner, distinct from the default caller
-      contract.commitRound(user).value = Uint64(1000)
+      contract.commitTarget(user).value = Uint64(1000)
       ctx.ledger.patchGlobalData({ round: Uint64(1000 + EXPIRY) })
       contract.reclaim(user)
-      expect(contract.commitRound(user).exists).toBe(false)
+      expect(contract.commitTarget(user).exists).toBe(false)
     })
   })
 

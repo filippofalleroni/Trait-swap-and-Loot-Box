@@ -8,9 +8,9 @@ The contract implements a commit-reveal pattern backed by the **Algorand Randomn
 
 ### Flow
 
-1. **Commit**: The user sends an atomic group containing a payment to the treasury (for at least the crate price) and an app call to `commit(payment)` that references that payment as its transaction argument. The contract verifies the payment and records the current round.
-2. **Wait**: The user waits until the Beacon has published the target round (see below) — a short wait of roughly `2 × cadence` rounds.
-3. **Reveal**: The user calls `reveal()` on-chain. The contract **deterministically** computes a future Beacon round from the commit round and the configured cadence (`target = (commitRound / cadence + 2) × cadence`), fetches that round's VRF value from the Beacon via `must_get(round, user_data)` — passing the caller's address as `user_data` so each account gets an independent draw — extracts a random `uint64`, deletes the commit box, and returns the value via ABI return. Because the target round is computed (not chosen by the caller), the outcome cannot be ground by picking a favourable round.
+1. **Commit**: The user sends an atomic group containing a payment to the treasury (for at least the crate price) and an app call to `commit(payment)` that references that payment as its transaction argument. The contract verifies the payment, **deterministically** computes a future Beacon round (`target = (commitRound / cadence + 2) × cadence`), and stores that target round in the user's box — locking it so later config changes can't move it.
+2. **Wait**: The user waits until the Beacon has published the target round — a short wait of roughly `2 × cadence` rounds.
+3. **Reveal**: The user calls `reveal()` on-chain. The contract reads the locked target round and fetches its VRF value from the Beacon via `must_get(round, user_data)` — passing the caller's address as `user_data` so each account gets an independent draw — extracts a random `uint64`, deletes the commit box, and returns the value via ABI return. Because the target round was computed by the contract (not chosen by the caller), the outcome cannot be ground by picking a favourable round.
 4. **Distribute**: The server verifies the on-chain reveal transaction, reads the ABI return value from the transaction logs, and uses it to determine the prize.
 
 ### Payment Enforcement

@@ -1,11 +1,12 @@
 // Commit-reveal loot box randomness, backed by the Algorand Randomness Beacon.
 //
-// The user commits (recording the current round) in an atomic group with a
-// payment to the treasury. On reveal, the contract DETERMINISTICALLY derives a
-// future beacon round from the commit and the beacon's cadence, fetches that
-// round's VRF value from the beacon — bound to the caller's address so every
-// account gets an independent draw — and returns it as a raw uint64. The server
-// maps that value to a prize off-chain.
+// The user commits in an atomic group with a payment to the treasury. The
+// commit DETERMINISTICALLY derives a future beacon round from the current round
+// and the beacon's cadence and stores THAT target round in a box, so the target
+// is locked at commit time and unaffected by any later config change. On reveal,
+// the contract fetches the target round's VRF value from the beacon — bound to
+// the caller's address so every account gets an independent draw — and returns
+// it as a raw uint64. The server maps that value to a prize off-chain.
 //
 // Because the target round is computed by the contract (never chosen by the
 // caller), the outcome cannot be ground by picking a favourable round. The
@@ -37,12 +38,14 @@ import {
 // The target beacon round is at least this many cadence-slots after the commit,
 // so its VRF value was unknowable when the user paid.
 const MIN_DELAY_SLOTS: uint64 = 2
-// Reveal window, kept within the beacon's retention so an unexpired commit's
-// beacon round is always still available.
-const EXPIRY_ROUNDS: uint64 = 400
+// How long after the target round a commit stays revealable. Kept within the
+// beacon's retention so the target round's value is always still available;
+// after this, the commit can be reclaimed.
+const REVEAL_WINDOW_ROUNDS: uint64 = 400
 
 export class LootBoxCommitReveal extends Contract {
-  commitRound = BoxMap<Account, uint64>({ keyPrefix: 'c' })
+  // Per account: the locked target beacon round to draw randomness from.
+  commitTarget = BoxMap<Account, uint64>({ keyPrefix: 'c' })
   treasuryAddress = GlobalState<Account>({ key: 'treasury' })
   cratePrice = GlobalState<uint64>({ key: 'price' })
   beaconApp = GlobalState<uint64>({ key: 'beacon' })
@@ -61,35 +64,39 @@ export class LootBoxCommitReveal extends Contract {
 
   @abimethod()
   commit(payment: gtxn.PaymentTxn): void {
+    const account = Txn.sender
+
     // The payment (referenced as a transaction argument) must pay the treasury
     // at least the crate price, from the same account that is committing.
     assert(payment.receiver === this.treasuryAddress.value, 'Payment must go to the treasury')
     assert(payment.amount >= this.cratePrice.value, 'Payment is below the crate price')
-    assert(payment.sender === Txn.sender, 'Payment sender must match the caller')
+    assert(payment.sender === account, 'Payment sender must match the caller')
 
     // One active commit per account: a second would overwrite the first and
     // lose its payment. The user must reveal() or reclaim() first.
-    assert(!this.commitRound(Txn.sender).exists, 'Active commit exists — reveal or reclaim first')
+    assert(!this.commitTarget(account).exists, 'Active commit exists — reveal or reclaim first')
 
-    this.commitRound(Txn.sender).value = Global.round
-    emit('Committed', new arc4.Address(Txn.sender), new arc4.Uint64(Global.round))
+    // Lock the target beacon round now, so later config changes can't move it.
+    const target: uint64 = this.targetRound(Global.round)
+    this.commitTarget(account).value = target
+    emit('Committed', new arc4.Address(account), new arc4.Uint64(target))
   }
 
   @abimethod()
   reveal(): uint64 {
-    assert(this.commitRound(Txn.sender).exists, 'No active commit to reveal')
-    const committed: uint64 = this.commitRound(Txn.sender).value
-    const target: uint64 = this.targetRound(committed)
+    const account = Txn.sender
+    assert(this.commitTarget(account).exists, 'No active commit to reveal')
+    const target: uint64 = this.commitTarget(account).value
 
     assert(Global.round > target, 'Beacon round not reached yet')
-    assert(Global.round < committed + EXPIRY_ROUNDS, 'Commit expired — call reclaim() and recommit')
+    assert(Global.round < target + REVEAL_WINDOW_ROUNDS, 'Commit expired — call reclaim() and recommit')
 
     // Effects before interactions: clear the commit, then make the external
     // beacon call. (A revert undoes both, and the beacon cannot re-enter us.)
-    this.commitRound(Txn.sender).delete()
-    const randomValue: uint64 = this.drawRandomness(target, Txn.sender)
+    this.commitTarget(account).delete()
+    const randomValue: uint64 = this.drawRandomness(target, account)
 
-    emit('Revealed', new arc4.Address(Txn.sender), new arc4.Uint64(target), new arc4.Uint64(randomValue))
+    emit('Revealed', new arc4.Address(account), new arc4.Uint64(target), new arc4.Uint64(randomValue))
     return randomValue
   }
 
@@ -97,11 +104,11 @@ export class LootBoxCommitReveal extends Contract {
   // revealed, so anyone may clean it up, freeing the box and returning its MBR
   // to the app account.
   @abimethod()
-  reclaim(target: Account): void {
-    assert(this.commitRound(target).exists, 'No commit to reclaim')
-    const committed = this.commitRound(target).value
-    assert(Global.round >= committed + EXPIRY_ROUNDS, 'Commit has not expired yet')
-    this.commitRound(target).delete()
+  reclaim(account: Account): void {
+    assert(this.commitTarget(account).exists, 'No commit to reclaim')
+    const target = this.commitTarget(account).value
+    assert(Global.round >= target + REVEAL_WINDOW_ROUNDS, 'Commit has not expired yet')
+    this.commitTarget(account).delete()
   }
 
   // Recover freed box MBR / excess funding. Creator-only; the AVM keeps the app
@@ -124,11 +131,11 @@ export class LootBoxCommitReveal extends Contract {
     this.beaconCadence.value = beaconCadence
   }
 
-  // The deterministic beacon round for a commit: the first beacon-published
-  // round at least MIN_DELAY_SLOTS cadence-slots after the commit.
-  private targetRound(committed: uint64): uint64 {
+  // The deterministic beacon round for a commit made at `committedRound`: the
+  // first beacon-published round at least MIN_DELAY_SLOTS cadence-slots later.
+  private targetRound(committedRound: uint64): uint64 {
     const cadence: uint64 = this.beaconCadence.value
-    return (committed / cadence + MIN_DELAY_SLOTS) * cadence
+    return (committedRound / cadence + MIN_DELAY_SLOTS) * cadence
   }
 
   // Fetch the VRF value for `round` from the beacon, bound to `account` so each

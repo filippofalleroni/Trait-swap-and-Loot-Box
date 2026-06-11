@@ -5,7 +5,7 @@
 main:
     intcblock 1 8 0 32
     bytecblock "c" "treasury" "price" "cadence" "beacon" 0x151f7c75
-    // lootbox-commit-reveal/contract.algo.ts:44
+    // lootbox-commit-reveal/contract.algo.ts:46
     // export class LootBoxCommitReveal extends Contract {
     txn OnCompletion
     !
@@ -18,7 +18,7 @@ main:
     err
 
 main_create_NoOp@9:
-    // lootbox-commit-reveal/contract.algo.ts:44
+    // lootbox-commit-reveal/contract.algo.ts:46
     // export class LootBoxCommitReveal extends Contract {
     pushbytes 0xb81e05da // method "createApplication(address,uint64,uint64,uint64)void"
     txna ApplicationArgs 0
@@ -28,7 +28,7 @@ main_create_NoOp@9:
 
 // lootbox-commit-reveal/contract.algo.ts::LootBoxCommitReveal.createApplication[routing]() -> void:
 createApplication:
-    // lootbox-commit-reveal/contract.algo.ts:51
+    // lootbox-commit-reveal/contract.algo.ts:54
     // @abimethod({ onCreate: 'require' })
     txna ApplicationArgs 1
     dup
@@ -57,10 +57,10 @@ createApplication:
     ==
     assert // invalid number of bytes for arc4.uint64
     btoi
-    // lootbox-commit-reveal/contract.algo.ts:53
+    // lootbox-commit-reveal/contract.algo.ts:56
     // this.setConfig(treasury, price, beaconApp, beaconCadence)
     callsub setConfig
-    // lootbox-commit-reveal/contract.algo.ts:51
+    // lootbox-commit-reveal/contract.algo.ts:54
     // @abimethod({ onCreate: 'require' })
     intc_0 // 1
     return
@@ -68,7 +68,7 @@ createApplication:
 
 // lootbox-commit-reveal/contract.algo.ts::LootBoxCommitReveal.configure[routing]() -> void:
 configure:
-    // lootbox-commit-reveal/contract.algo.ts:56
+    // lootbox-commit-reveal/contract.algo.ts:59
     // @abimethod()
     txna ApplicationArgs 1
     dup
@@ -97,16 +97,16 @@ configure:
     ==
     assert // invalid number of bytes for arc4.uint64
     btoi
-    // lootbox-commit-reveal/contract.algo.ts:58
+    // lootbox-commit-reveal/contract.algo.ts:61
     // assert(Txn.sender === Global.creatorAddress, 'Only the creator can configure')
     txn Sender
     global CreatorAddress
     ==
     assert // Only the creator can configure
-    // lootbox-commit-reveal/contract.algo.ts:59
+    // lootbox-commit-reveal/contract.algo.ts:62
     // this.setConfig(treasury, price, beaconApp, beaconCadence)
     callsub setConfig
-    // lootbox-commit-reveal/contract.algo.ts:56
+    // lootbox-commit-reveal/contract.algo.ts:59
     // @abimethod()
     intc_0 // 1
     return
@@ -114,7 +114,7 @@ configure:
 
 // lootbox-commit-reveal/contract.algo.ts::LootBoxCommitReveal.commit[routing]() -> void:
 commit:
-    // lootbox-commit-reveal/contract.algo.ts:62
+    // lootbox-commit-reveal/contract.algo.ts:65
     // @abimethod()
     txn GroupIndex
     intc_0 // 1
@@ -124,83 +124,91 @@ commit:
     intc_0 // pay
     ==
     assert // transaction type is pay
-    // lootbox-commit-reveal/contract.algo.ts:66
+    // lootbox-commit-reveal/contract.algo.ts:67
+    // const account = Txn.sender
+    txn Sender
+    // lootbox-commit-reveal/contract.algo.ts:71
     // assert(payment.receiver === this.treasuryAddress.value, 'Payment must go to the treasury')
-    dup
+    dig 1
     gtxns Receiver
     intc_2 // 0
-    // lootbox-commit-reveal/contract.algo.ts:46
+    // lootbox-commit-reveal/contract.algo.ts:49
     // treasuryAddress = GlobalState<Account>({ key: 'treasury' })
     bytec_1 // "treasury"
-    // lootbox-commit-reveal/contract.algo.ts:66
+    // lootbox-commit-reveal/contract.algo.ts:71
     // assert(payment.receiver === this.treasuryAddress.value, 'Payment must go to the treasury')
     app_global_get_ex
     assert // check GlobalState exists
     ==
     assert // Payment must go to the treasury
-    // lootbox-commit-reveal/contract.algo.ts:67
+    // lootbox-commit-reveal/contract.algo.ts:72
     // assert(payment.amount >= this.cratePrice.value, 'Payment is below the crate price')
-    dup
+    dig 1
     gtxns Amount
     intc_2 // 0
-    // lootbox-commit-reveal/contract.algo.ts:47
+    // lootbox-commit-reveal/contract.algo.ts:50
     // cratePrice = GlobalState<uint64>({ key: 'price' })
     bytec_2 // "price"
-    // lootbox-commit-reveal/contract.algo.ts:67
+    // lootbox-commit-reveal/contract.algo.ts:72
     // assert(payment.amount >= this.cratePrice.value, 'Payment is below the crate price')
     app_global_get_ex
     assert // check GlobalState exists
     >=
     assert // Payment is below the crate price
-    // lootbox-commit-reveal/contract.algo.ts:68
-    // assert(payment.sender === Txn.sender, 'Payment sender must match the caller')
+    // lootbox-commit-reveal/contract.algo.ts:73
+    // assert(payment.sender === account, 'Payment sender must match the caller')
+    swap
     gtxns Sender
-    txn Sender
+    dig 1
     ==
     assert // Payment sender must match the caller
-    // lootbox-commit-reveal/contract.algo.ts:45
-    // commitRound = BoxMap<Account, uint64>({ keyPrefix: 'c' })
+    // lootbox-commit-reveal/contract.algo.ts:48
+    // commitTarget = BoxMap<Account, uint64>({ keyPrefix: 'c' })
     bytec_0 // "c"
-    // lootbox-commit-reveal/contract.algo.ts:72
-    // assert(!this.commitRound(Txn.sender).exists, 'Active commit exists — reveal or reclaim first')
-    txn Sender
-    // lootbox-commit-reveal/contract.algo.ts:45
-    // commitRound = BoxMap<Account, uint64>({ keyPrefix: 'c' })
+    dig 1
     concat
-    // lootbox-commit-reveal/contract.algo.ts:72
-    // assert(!this.commitRound(Txn.sender).exists, 'Active commit exists — reveal or reclaim first')
+    // lootbox-commit-reveal/contract.algo.ts:77
+    // assert(!this.commitTarget(account).exists, 'Active commit exists — reveal or reclaim first')
+    dup
     box_len
     bury 1
     !
     assert // Active commit exists — reveal or reclaim first
-    // lootbox-commit-reveal/contract.algo.ts:74
-    // this.commitRound(Txn.sender).value = Global.round
+    // lootbox-commit-reveal/contract.algo.ts:80
+    // const target: uint64 = this.targetRound(Global.round)
     global Round
-    // lootbox-commit-reveal/contract.algo.ts:45
-    // commitRound = BoxMap<Account, uint64>({ keyPrefix: 'c' })
-    bytec_0 // "c"
-    // lootbox-commit-reveal/contract.algo.ts:74
-    // this.commitRound(Txn.sender).value = Global.round
-    txn Sender
-    // lootbox-commit-reveal/contract.algo.ts:45
-    // commitRound = BoxMap<Account, uint64>({ keyPrefix: 'c' })
-    concat
-    // lootbox-commit-reveal/contract.algo.ts:74
-    // this.commitRound(Txn.sender).value = Global.round
+    // lootbox-commit-reveal/contract.algo.ts:137
+    // const cadence: uint64 = this.beaconCadence.value
+    intc_2 // 0
+    // lootbox-commit-reveal/contract.algo.ts:52
+    // beaconCadence = GlobalState<uint64>({ key: 'cadence' })
+    bytec_3 // "cadence"
+    // lootbox-commit-reveal/contract.algo.ts:137
+    // const cadence: uint64 = this.beaconCadence.value
+    app_global_get_ex
+    assert // check GlobalState exists
+    // lootbox-commit-reveal/contract.algo.ts:138
+    // return (committedRound / cadence + MIN_DELAY_SLOTS) * cadence
     swap
+    dig 1
+    /
+    pushint 2 // 2
+    +
+    *
+    // lootbox-commit-reveal/contract.algo.ts:81
+    // this.commitTarget(account).value = target
     itob
+    swap
+    dig 1
     box_put
-    // lootbox-commit-reveal/contract.algo.ts:75
-    // emit('Committed', new arc4.Address(Txn.sender), new arc4.Uint64(Global.round))
-    txn Sender
-    global Round
-    itob
+    // lootbox-commit-reveal/contract.algo.ts:82
+    // emit('Committed', new arc4.Address(account), new arc4.Uint64(target))
     concat
     pushbytes 0x33426673 // method "Committed(address,uint64)"
     swap
     concat
     log
-    // lootbox-commit-reveal/contract.algo.ts:62
+    // lootbox-commit-reveal/contract.algo.ts:65
     // @abimethod()
     intc_0 // 1
     return
@@ -208,82 +216,46 @@ commit:
 
 // lootbox-commit-reveal/contract.algo.ts::LootBoxCommitReveal.reveal[routing]() -> void:
 reveal:
-    // lootbox-commit-reveal/contract.algo.ts:45
-    // commitRound = BoxMap<Account, uint64>({ keyPrefix: 'c' })
-    bytec_0 // "c"
-    // lootbox-commit-reveal/contract.algo.ts:80
-    // assert(this.commitRound(Txn.sender).exists, 'No active commit to reveal')
+    // lootbox-commit-reveal/contract.algo.ts:87
+    // const account = Txn.sender
     txn Sender
-    // lootbox-commit-reveal/contract.algo.ts:45
-    // commitRound = BoxMap<Account, uint64>({ keyPrefix: 'c' })
+    // lootbox-commit-reveal/contract.algo.ts:48
+    // commitTarget = BoxMap<Account, uint64>({ keyPrefix: 'c' })
+    bytec_0 // "c"
+    dig 1
     concat
-    // lootbox-commit-reveal/contract.algo.ts:80
-    // assert(this.commitRound(Txn.sender).exists, 'No active commit to reveal')
+    // lootbox-commit-reveal/contract.algo.ts:88
+    // assert(this.commitTarget(account).exists, 'No active commit to reveal')
+    dup
     box_len
     bury 1
     assert // No active commit to reveal
-    // lootbox-commit-reveal/contract.algo.ts:45
-    // commitRound = BoxMap<Account, uint64>({ keyPrefix: 'c' })
-    bytec_0 // "c"
-    // lootbox-commit-reveal/contract.algo.ts:81
-    // const committed: uint64 = this.commitRound(Txn.sender).value
-    txn Sender
-    // lootbox-commit-reveal/contract.algo.ts:45
-    // commitRound = BoxMap<Account, uint64>({ keyPrefix: 'c' })
-    concat
-    // lootbox-commit-reveal/contract.algo.ts:81
-    // const committed: uint64 = this.commitRound(Txn.sender).value
+    // lootbox-commit-reveal/contract.algo.ts:89
+    // const target: uint64 = this.commitTarget(account).value
+    dup
     box_get
-    assert // Box must have value
+    pop
     btoi
-    // lootbox-commit-reveal/contract.algo.ts:130
-    // const cadence: uint64 = this.beaconCadence.value
-    intc_2 // 0
-    // lootbox-commit-reveal/contract.algo.ts:49
-    // beaconCadence = GlobalState<uint64>({ key: 'cadence' })
-    bytec_3 // "cadence"
-    // lootbox-commit-reveal/contract.algo.ts:130
-    // const cadence: uint64 = this.beaconCadence.value
-    app_global_get_ex
-    assert // check GlobalState exists
-    // lootbox-commit-reveal/contract.algo.ts:131
-    // return (committed / cadence + MIN_DELAY_SLOTS) * cadence
-    dup2
-    /
-    pushint 2 // 2
-    +
-    *
-    // lootbox-commit-reveal/contract.algo.ts:84
+    // lootbox-commit-reveal/contract.algo.ts:91
     // assert(Global.round > target, 'Beacon round not reached yet')
     global Round
     dig 1
     >
     assert // Beacon round not reached yet
-    // lootbox-commit-reveal/contract.algo.ts:85
-    // assert(Global.round < committed + EXPIRY_ROUNDS, 'Commit expired — call reclaim() and recommit')
+    // lootbox-commit-reveal/contract.algo.ts:92
+    // assert(Global.round < target + REVEAL_WINDOW_ROUNDS, 'Commit expired — call reclaim() and recommit')
     global Round
-    uncover 2
+    dig 1
     pushint 400 // 400
     +
     <
     assert // Commit expired — call reclaim() and recommit
-    // lootbox-commit-reveal/contract.algo.ts:45
-    // commitRound = BoxMap<Account, uint64>({ keyPrefix: 'c' })
-    bytec_0 // "c"
-    // lootbox-commit-reveal/contract.algo.ts:89
-    // this.commitRound(Txn.sender).delete()
-    txn Sender
-    // lootbox-commit-reveal/contract.algo.ts:45
-    // commitRound = BoxMap<Account, uint64>({ keyPrefix: 'c' })
-    concat
-    // lootbox-commit-reveal/contract.algo.ts:89
-    // this.commitRound(Txn.sender).delete()
+    // lootbox-commit-reveal/contract.algo.ts:96
+    // this.commitTarget(account).delete()
+    swap
     box_del
     pop
-    // lootbox-commit-reveal/contract.algo.ts:90
-    // const randomValue: uint64 = this.drawRandomness(target, Txn.sender)
-    txn Sender
-    // lootbox-commit-reveal/contract.algo.ts:139-149
+    // lootbox-commit-reveal/contract.algo.ts:146-156
     // itxn
     //   .applicationCall({
     //     appId: this.beaconApp.value,
@@ -296,26 +268,26 @@ reveal:
     //   })
     //   .submit().lastLog,
     itxn_begin
-    // lootbox-commit-reveal/contract.algo.ts:141
+    // lootbox-commit-reveal/contract.algo.ts:148
     // appId: this.beaconApp.value,
     intc_2 // 0
-    // lootbox-commit-reveal/contract.algo.ts:48
+    // lootbox-commit-reveal/contract.algo.ts:51
     // beaconApp = GlobalState<uint64>({ key: 'beacon' })
     bytec 4 // "beacon"
-    // lootbox-commit-reveal/contract.algo.ts:141
+    // lootbox-commit-reveal/contract.algo.ts:148
     // appId: this.beaconApp.value,
     app_global_get_ex
     assert // check GlobalState exists
-    // lootbox-commit-reveal/contract.algo.ts:144
+    // lootbox-commit-reveal/contract.algo.ts:151
     // new arc4.Uint64(round),
-    uncover 2
+    swap
     itob
-    // lootbox-commit-reveal/contract.algo.ts:145
+    // lootbox-commit-reveal/contract.algo.ts:152
     // new arc4.DynamicBytes(account.bytes),
     pushbytes 0x0020
-    uncover 3
+    dig 3
     concat
-    // lootbox-commit-reveal/contract.algo.ts:143
+    // lootbox-commit-reveal/contract.algo.ts:150
     // arc4.methodSelector('must_get(uint64,byte[])byte[]'),
     pushbytes 0x47c20c23 // method "must_get(uint64,byte[])byte[]"
     itxn_field ApplicationArgs
@@ -324,7 +296,7 @@ reveal:
     itxn_field ApplicationArgs
     swap
     itxn_field ApplicationID
-    // lootbox-commit-reveal/contract.algo.ts:139-148
+    // lootbox-commit-reveal/contract.algo.ts:146-155
     // itxn
     //   .applicationCall({
     //     appId: this.beaconApp.value,
@@ -337,11 +309,11 @@ reveal:
     //   })
     pushint 6 // 6
     itxn_field TypeEnum
-    // lootbox-commit-reveal/contract.algo.ts:147
+    // lootbox-commit-reveal/contract.algo.ts:154
     // fee: 0,
     intc_2 // 0
     itxn_field Fee
-    // lootbox-commit-reveal/contract.algo.ts:139-149
+    // lootbox-commit-reveal/contract.algo.ts:146-156
     // itxn
     //   .applicationCall({
     //     appId: this.beaconApp.value,
@@ -355,7 +327,7 @@ reveal:
     //   .submit().lastLog,
     itxn_submit
     itxn LastLog
-    // lootbox-commit-reveal/contract.algo.ts:138-151
+    // lootbox-commit-reveal/contract.algo.ts:145-158
     // const vrf = arc4.decodeArc4<bytes>(
     //   itxn
     //     .applicationCall({
@@ -372,10 +344,10 @@ reveal:
     // )
     dup
     extract 0 4
-    // lootbox-commit-reveal/contract.algo.ts:150
+    // lootbox-commit-reveal/contract.algo.ts:157
     // 'log',
     bytec 5 // 0x151f7c75
-    // lootbox-commit-reveal/contract.algo.ts:138-151
+    // lootbox-commit-reveal/contract.algo.ts:145-158
     // const vrf = arc4.decodeArc4<bytes>(
     //   itxn
     //     .applicationCall({
@@ -392,13 +364,10 @@ reveal:
     // )
     ==
     assert // Bytes has valid prefix
-    // lootbox-commit-reveal/contract.algo.ts:92
-    // emit('Revealed', new arc4.Address(Txn.sender), new arc4.Uint64(target), new arc4.Uint64(randomValue))
-    txn Sender
-    swap
+    // lootbox-commit-reveal/contract.algo.ts:99
+    // emit('Revealed', new arc4.Address(account), new arc4.Uint64(target), new arc4.Uint64(randomValue))
     extract 6 8
-    swap
-    uncover 2
+    cover 2
     concat
     dig 1
     concat
@@ -406,7 +375,7 @@ reveal:
     swap
     concat
     log
-    // lootbox-commit-reveal/contract.algo.ts:78
+    // lootbox-commit-reveal/contract.algo.ts:85
     // @abimethod()
     bytec 5 // 0x151f7c75
     swap
@@ -418,7 +387,7 @@ reveal:
 
 // lootbox-commit-reveal/contract.algo.ts::LootBoxCommitReveal.reclaim[routing]() -> void:
 reclaim:
-    // lootbox-commit-reveal/contract.algo.ts:99
+    // lootbox-commit-reveal/contract.algo.ts:106
     // @abimethod()
     txna ApplicationArgs 1
     dup
@@ -426,36 +395,36 @@ reclaim:
     intc_3 // 32
     ==
     assert // invalid number of bytes for arc4.static_array<arc4.uint8, 32>
-    // lootbox-commit-reveal/contract.algo.ts:45
-    // commitRound = BoxMap<Account, uint64>({ keyPrefix: 'c' })
+    // lootbox-commit-reveal/contract.algo.ts:48
+    // commitTarget = BoxMap<Account, uint64>({ keyPrefix: 'c' })
     bytec_0 // "c"
     swap
     concat
-    // lootbox-commit-reveal/contract.algo.ts:101
-    // assert(this.commitRound(target).exists, 'No commit to reclaim')
+    // lootbox-commit-reveal/contract.algo.ts:108
+    // assert(this.commitTarget(account).exists, 'No commit to reclaim')
     dup
     box_len
     bury 1
     assert // No commit to reclaim
-    // lootbox-commit-reveal/contract.algo.ts:102
-    // const committed = this.commitRound(target).value
+    // lootbox-commit-reveal/contract.algo.ts:109
+    // const target = this.commitTarget(account).value
     dup
     box_get
     pop
     btoi
-    // lootbox-commit-reveal/contract.algo.ts:103
-    // assert(Global.round >= committed + EXPIRY_ROUNDS, 'Commit has not expired yet')
+    // lootbox-commit-reveal/contract.algo.ts:110
+    // assert(Global.round >= target + REVEAL_WINDOW_ROUNDS, 'Commit has not expired yet')
     global Round
     swap
     pushint 400 // 400
     +
     >=
     assert // Commit has not expired yet
-    // lootbox-commit-reveal/contract.algo.ts:104
-    // this.commitRound(target).delete()
+    // lootbox-commit-reveal/contract.algo.ts:111
+    // this.commitTarget(account).delete()
     box_del
     pop
-    // lootbox-commit-reveal/contract.algo.ts:99
+    // lootbox-commit-reveal/contract.algo.ts:106
     // @abimethod()
     intc_0 // 1
     return
@@ -463,7 +432,7 @@ reclaim:
 
 // lootbox-commit-reveal/contract.algo.ts::LootBoxCommitReveal.withdraw[routing]() -> void:
 withdraw:
-    // lootbox-commit-reveal/contract.algo.ts:109
+    // lootbox-commit-reveal/contract.algo.ts:116
     // @abimethod()
     txna ApplicationArgs 1
     dup
@@ -472,13 +441,13 @@ withdraw:
     ==
     assert // invalid number of bytes for arc4.uint64
     btoi
-    // lootbox-commit-reveal/contract.algo.ts:111
+    // lootbox-commit-reveal/contract.algo.ts:118
     // assert(Txn.sender === Global.creatorAddress, 'Only the creator can withdraw')
     txn Sender
     global CreatorAddress
     ==
     assert // Only the creator can withdraw
-    // lootbox-commit-reveal/contract.algo.ts:112
+    // lootbox-commit-reveal/contract.algo.ts:119
     // itxn.payment({ receiver: Global.creatorAddress, amount: amount, fee: 0 }).submit()
     itxn_begin
     global CreatorAddress
@@ -489,7 +458,7 @@ withdraw:
     intc_2 // 0
     itxn_field Fee
     itxn_submit
-    // lootbox-commit-reveal/contract.algo.ts:109
+    // lootbox-commit-reveal/contract.algo.ts:116
     // @abimethod()
     intc_0 // 1
     return
@@ -497,46 +466,46 @@ withdraw:
 
 // lootbox-commit-reveal/contract.algo.ts::LootBoxCommitReveal.setConfig(treasury: bytes, price: uint64, beaconApp: uint64, beaconCadence: uint64) -> void:
 setConfig:
-    // lootbox-commit-reveal/contract.algo.ts:117
+    // lootbox-commit-reveal/contract.algo.ts:124
     // private setConfig(treasury: Account, price: uint64, beaconApp: uint64, beaconCadence: uint64): void {
     proto 4 0
-    // lootbox-commit-reveal/contract.algo.ts:118
+    // lootbox-commit-reveal/contract.algo.ts:125
     // assert(price > Uint64(0), 'Crate price must be positive')
     frame_dig -3
     assert // Crate price must be positive
-    // lootbox-commit-reveal/contract.algo.ts:119
+    // lootbox-commit-reveal/contract.algo.ts:126
     // assert(beaconApp > Uint64(0), 'Beacon app id is required')
     frame_dig -2
     assert // Beacon app id is required
-    // lootbox-commit-reveal/contract.algo.ts:120
+    // lootbox-commit-reveal/contract.algo.ts:127
     // assert(beaconCadence > Uint64(0), 'Beacon cadence must be positive')
     frame_dig -1
     assert // Beacon cadence must be positive
-    // lootbox-commit-reveal/contract.algo.ts:46
+    // lootbox-commit-reveal/contract.algo.ts:49
     // treasuryAddress = GlobalState<Account>({ key: 'treasury' })
     bytec_1 // "treasury"
-    // lootbox-commit-reveal/contract.algo.ts:121
+    // lootbox-commit-reveal/contract.algo.ts:128
     // this.treasuryAddress.value = treasury
     frame_dig -4
     app_global_put
-    // lootbox-commit-reveal/contract.algo.ts:47
+    // lootbox-commit-reveal/contract.algo.ts:50
     // cratePrice = GlobalState<uint64>({ key: 'price' })
     bytec_2 // "price"
-    // lootbox-commit-reveal/contract.algo.ts:122
+    // lootbox-commit-reveal/contract.algo.ts:129
     // this.cratePrice.value = price
     frame_dig -3
     app_global_put
-    // lootbox-commit-reveal/contract.algo.ts:48
+    // lootbox-commit-reveal/contract.algo.ts:51
     // beaconApp = GlobalState<uint64>({ key: 'beacon' })
     bytec 4 // "beacon"
-    // lootbox-commit-reveal/contract.algo.ts:123
+    // lootbox-commit-reveal/contract.algo.ts:130
     // this.beaconApp.value = beaconApp
     frame_dig -2
     app_global_put
-    // lootbox-commit-reveal/contract.algo.ts:49
+    // lootbox-commit-reveal/contract.algo.ts:52
     // beaconCadence = GlobalState<uint64>({ key: 'cadence' })
     bytec_3 // "cadence"
-    // lootbox-commit-reveal/contract.algo.ts:124
+    // lootbox-commit-reveal/contract.algo.ts:131
     // this.beaconCadence.value = beaconCadence
     frame_dig -1
     app_global_put
