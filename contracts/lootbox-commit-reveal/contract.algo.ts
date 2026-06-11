@@ -74,9 +74,13 @@ class LootBoxCommitReveal extends Contract {
     assert(globals.round > committed + MIN_WAIT_ROUNDS, "Must wait at least 8 rounds after commit");
     assert(globals.round < committed + EXPIRY_ROUNDS, "Commit expired — call reclaim() and recommit");
 
+    // The VRF block seed is shared by everyone whose commit resolves to the
+    // same block, so mix in the caller's address before deriving the value.
+    // Without this, two users who commit in the same round would read the same
+    // seed and receive the same random number (and, under fixed odds, the same
+    // prize). Hashing seed || sender gives each caller an independent draw.
     const seed = blocks[committed + 1].seed;
-    // Extract the first 8 bytes of the VRF seed and convert to uint64.
-    const randomValue = btoi(extract3(seed, 0, 8));
+    const randomValue = btoi(extract3(sha256(concat(seed, this.txn.sender)), 0, 8));
 
     this.commitRound(this.txn.sender).delete();
     return randomValue;

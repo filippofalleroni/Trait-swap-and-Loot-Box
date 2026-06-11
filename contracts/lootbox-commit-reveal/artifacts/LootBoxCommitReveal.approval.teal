@@ -243,7 +243,7 @@ reveal:
 	// Commit expired — call reclaim() and recommit
 	assert
 
-	// lootbox-commit-reveal/contract.algo.ts:77
+	// lootbox-commit-reveal/contract.algo.ts:82
 	// seed = blocks[committed + 1].seed
 	frame_dig 0 // committed: uint64
 	intc 0 // 1
@@ -251,19 +251,22 @@ reveal:
 	block BlkSeed
 	frame_bury 1 // seed: byte[]
 
-	// lootbox-commit-reveal/contract.algo.ts:79
-	// randomValue = btoi(extract3(seed, 0, 8))
+	// lootbox-commit-reveal/contract.algo.ts:83
+	// randomValue = btoi(extract3(sha256(concat(seed, this.txn.sender)), 0, 8))
 	frame_dig 1 // seed: byte[]
+	txn Sender
+	concat
+	sha256
 	extract 0 8
 	btoi
 	frame_bury 2 // randomValue: uint64
 
-	// lootbox-commit-reveal/contract.algo.ts:81
+	// lootbox-commit-reveal/contract.algo.ts:85
 	// this.commitRound(this.txn.sender).delete()
 	txn Sender
 	box_del
 
-	// lootbox-commit-reveal/contract.algo.ts:82
+	// lootbox-commit-reveal/contract.algo.ts:86
 	// return randomValue;
 	frame_dig 2 // randomValue: uint64
 
@@ -288,7 +291,7 @@ reclaim:
 	// Push empty bytes after the frame pointer to reserve space for local variables
 	bytec 0 // 0x
 
-	// lootbox-commit-reveal/contract.algo.ts:86
+	// lootbox-commit-reveal/contract.algo.ts:96
 	// committed = this.commitRound(this.txn.sender).value
 	txn Sender
 	box_get
@@ -298,7 +301,7 @@ reclaim:
 	btoi
 	frame_bury 0 // committed: uint64
 
-	// lootbox-commit-reveal/contract.algo.ts:87
+	// lootbox-commit-reveal/contract.algo.ts:97
 	// assert(globals.round >= committed + EXPIRY_ROUNDS, "Commit has not expired yet")
 	global Round
 	frame_dig 0 // committed: uint64
@@ -309,7 +312,7 @@ reclaim:
 	// Commit has not expired yet
 	assert
 
-	// lootbox-commit-reveal/contract.algo.ts:88
+	// lootbox-commit-reveal/contract.algo.ts:98
 	// this.commitRound(this.txn.sender).delete()
 	txn Sender
 	box_del

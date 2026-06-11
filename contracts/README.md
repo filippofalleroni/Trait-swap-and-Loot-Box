@@ -4,13 +4,13 @@ This directory contains the TEALScript source for the commit-reveal randomness c
 
 ## Overview
 
-The contract implements a commit-reveal pattern using the [Algorand Randomness Beacon](https://developer.algorand.org/docs/get-details/randomness-beacon/). It enforces payment, generates verifiable randomness, and returns the result on-chain — the server never touches the VRF seed directly.
+The contract implements a commit-reveal pattern using Algorand's on-chain **VRF block seed** (read directly from the block header via the `block` opcode — no external dependency). It enforces payment, generates verifiable randomness, and returns the result on-chain — the server never generates the randomness itself.
 
 ### Flow
 
 1. **Commit**: The user sends an atomic group containing a payment to the treasury (for at least the crate price) followed by an app call to `commit()`. The contract verifies the payment and records the current round.
 2. **Wait**: The user waits at least 9 rounds for the VRF seed to become available (the contract requires `globals.round > committed + 8`, i.e. strictly greater).
-3. **Reveal**: The user calls `reveal()` on-chain. The contract reads the VRF seed from `blocks[committed+1]`, extracts a random `uint64`, deletes the commit box, and returns the value via ABI return.
+3. **Reveal**: The user calls `reveal()` on-chain. The contract reads the VRF seed from `blocks[committed+1]`, hashes it together with the caller's address (`sha256(seed || sender)`) so concurrent openers in the same block get independent draws, extracts a random `uint64`, deletes the commit box, and returns the value via ABI return.
 4. **Distribute**: The server verifies the on-chain reveal transaction, reads the ABI return value from the transaction logs, and uses it to determine the prize.
 
 ### Payment Enforcement
@@ -97,7 +97,7 @@ Then deploy to LocalNet and run the loot box flow end-to-end.
 | `createApplication(treasury, price)` | Deploy-time setup. Sets the treasury address and crate price in global state. |
 | `configure(treasury, price)` | Creator-only. Updates the treasury address and/or crate price. |
 | `commit()` | Verifies the preceding payment in the atomic group (correct receiver, amount, sender). Rejects if the sender already has an active commit. Records the current round. |
-| `reveal()` | Reads the VRF seed from `blocks[committed+1]`, returns a random `uint64`, deletes the commit box. Requires at least 9 rounds to have passed (strict `>`). Fails after 900 rounds. |
+| `reveal()` | Reads the VRF seed from `blocks[committed+1]`, hashes it with the caller's address (`sha256(seed \|\| sender)`) for per-caller independence, returns a random `uint64`, deletes the commit box. Requires at least 9 rounds to have passed (strict `>`). Fails after 900 rounds. |
 | `reclaim()` | Deletes an expired commit (900+ rounds old) so the user can recommit. Frees the associated box MBR. |
 
 ## Build Exclusion
