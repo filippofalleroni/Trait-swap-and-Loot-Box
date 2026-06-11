@@ -4,12 +4,17 @@
   "private": true,
   "description": "Algorand TypeScript (Puya) commit-reveal contract for the loot box.",
   "scripts": {
-    "build": "algokit compile ts lootbox-commit-reveal --output-source-map --out-dir artifacts"
+    "build": "algokit compile ts lootbox-commit-reveal --output-source-map --out-dir artifacts",
+    "test": "vitest run"
   },
   "dependencies": {
     "@algorandfoundation/algorand-typescript": "^1.1.0"
   },
   "devDependencies": {
-    "@algorandfoundation/puya-ts": "^1.0.1"
+    "@algorandfoundation/algorand-typescript-testing": "^1.1.0",
+    "@algorandfoundation/puya-ts": "^1.0.1",
+    "@rollup/plugin-typescript": "^12.3.0",
+    "typescript": "^5.8.3",
+    "vitest": "^2.1.9"
   }
 }

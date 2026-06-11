@@ -87,7 +87,21 @@ To change the treasury, price, Beacon app id, or cadence after deployment, call 
 
 ### Testing
 
-The Randomness Beacon is **not** available on LocalNet, so test the live flow on **TestNet** (Beacon app `600011887`). Unit tests can mock the Beacon's `must_get` call. App development can use the app's preview mode, which doesn't touch the contract.
+```bash
+npm test   # vitest — unit tests (@algorandfoundation/algorand-typescript-testing)
+```
+
+The unit suite (`contract.algo.spec.ts`) covers everything deterministic:
+config validation, creator-only access control, the `commit(payment)`
+verification (receiver / amount / sender / double-commit), the `reveal` guards
+(no commit / before the target round / expired), the `reclaim` lifecycle
+(including permissionless sweep of expired commits), and `withdraw` access
+control.
+
+The live `reveal()` path makes an inner call to the Randomness Beacon, which is
+**not** available on LocalNet and can't be emulated in unit tests — it is
+validated **end-to-end on TestNet** (Beacon app `600011887`). App development can
+use the app's preview mode, which doesn't touch the contract.
 
 ## Contract Methods
 
