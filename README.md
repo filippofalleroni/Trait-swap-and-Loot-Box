@@ -223,7 +223,7 @@ This lets you develop the UI, test wallet integration, and verify payment flows 
 
 Every payment is verified on-chain via the indexer before proceeding. The server checks sender, receiver, amount, transaction type, note prefix, and age. Transactions with `rekey-to` or `close-remainder-to` fields are rejected. Overpayments (>2x expected) are flagged. The loot box smart contract independently verifies the payment in the atomic group, so no one can commit without paying.
 
-Trait swap and loot box payments use different note prefixes (`traitswap:` and `lootbox:`) so one cannot be replayed as the other. Used transaction IDs are tracked and rejected on resubmission.
+Trait swap and loot box payments use different note prefixes (`traitswap:` and `lootbox:`) so one cannot be replayed as the other. Loot box distribution is **idempotent**: each payout is keyed to its payment transaction ID and recorded in the on-chain distribution note, so resubmitting a completed open returns the original result instead of paying out a second time.
 
 ### Randomness
 
@@ -231,7 +231,7 @@ In live mode, randomness is generated entirely on-chain by the smart contract us
 
 ### Reliability
 
-If the browser closes mid-flow, pending state is saved to `localStorage`. On return the UI resumes from where the user left off -- VRF wait, reveal signing, or server distribution. Prize distribution retries up to 3 times with delays between attempts. If a trait swap fails after payment (e.g. IPFS timeout), the transaction ID is released so the user can retry with the same payment.
+If the browser closes mid-flow, pending state is saved to `localStorage`. On return the UI resumes from where the user left off -- VRF wait, reveal signing, or server distribution. Prize distribution retries up to 3 times with delays between attempts, resending the *same* signed transaction so a confirmation timeout can never pay out twice. Before sending — and before processing any retry — the server checks the indexer for an existing payout tied to that payment, so a lost response or a server restart results in recovery, never a double distribution. If a trait swap fails after payment (e.g. IPFS timeout), the transaction ID is released so the user can retry with the same payment.
 
 ### Server-Side Security
 
@@ -243,8 +243,7 @@ Admin access requires signing a challenge nonce with the wallet's Ed25519 key. T
 
 ### Production Recommendations
 
-- **Persistent replay protection** -- The in-memory transaction ID set resets on server restart. For production, store used IDs in Redis, Vercel KV, or a database.
-- **Prize locking** -- Implement a lock-distribute-confirm pattern with database persistence to handle partial distribution failures.
+- **Persistent replay protection (trait swap)** -- The trait-swap route tracks used transaction IDs in memory, which resets on server restart. For production, store used IDs in Redis, Vercel KV, or a database. (Loot box distribution does not depend on this — it is made idempotent on-chain via the payment-keyed distribution note, so it survives restarts and cold starts; see [Reliability](#reliability) above.)
 - **Session persistence** -- Admin sessions are in-memory. Use encrypted httpOnly cookies or a session store for production.
 - **Persistent rate limiting** -- The in-memory rate limiters reset on restart. Use edge middleware or a distributed store for production.
 - **Smart contract audit** -- The included contract is a reference implementation. Have it reviewed before deploying with real funds.
@@ -365,7 +364,7 @@ Contributions are welcome.
 ### Ideas for Contributions
 
 - Unit tests for prize resolution and ARC-19 address computation
-- Persistent transaction replay protection (database-backed)
+- Persistent transaction replay protection for trait swap (database-backed)
 - Database-backed trait registry (replacing `mock-data.ts`)
 - Support for ARC-69 metadata in addition to ARC-19
 - Additional wallet support (Exodus, WalletConnect v2)
