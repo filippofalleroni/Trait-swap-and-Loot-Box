@@ -11,6 +11,10 @@
 // caller), the outcome cannot be ground by picking a favourable round. The
 // beacon app id and cadence live in global state, so one contract serves any
 // network (TestNet/MainNet beacons differ).
+//
+// ARC-28 events (Committed, Revealed) are emitted so off-chain indexers can
+// follow the lifecycle and anyone can audit fairness: for a Revealed event,
+// `value == extractUint64(beacon.must_get(round, account))`.
 
 import type { bytes, uint64 } from '@algorandfoundation/algorand-typescript'
 import {
@@ -20,6 +24,7 @@ import {
   assert,
   BoxMap,
   Contract,
+  emit,
   Global,
   GlobalState,
   gtxn,
@@ -55,11 +60,9 @@ export class LootBoxCommitReveal extends Contract {
   }
 
   @abimethod()
-  commit(): void {
-    // The commit must be preceded in the atomic group by a payment to the
-    // treasury for at least the crate price, from the same sender.
-    assert(Txn.groupIndex > Uint64(0), 'Commit must follow its payment in the group')
-    const payment = gtxn.PaymentTxn(Txn.groupIndex - Uint64(1))
+  commit(payment: gtxn.PaymentTxn): void {
+    // The payment (referenced as a transaction argument) must pay the treasury
+    // at least the crate price, from the same account that is committing.
     assert(payment.receiver === this.treasuryAddress.value, 'Payment must go to the treasury')
     assert(payment.amount >= this.cratePrice.value, 'Payment is below the crate price')
     assert(payment.sender === Txn.sender, 'Payment sender must match the caller')
@@ -69,6 +72,7 @@ export class LootBoxCommitReveal extends Contract {
     assert(!this.commitRound(Txn.sender).exists, 'Active commit exists — reveal or reclaim first')
 
     this.commitRound(Txn.sender).value = Global.round
+    emit('Committed', new arc4.Address(Txn.sender), new arc4.Uint64(Global.round))
   }
 
   @abimethod()
@@ -83,7 +87,10 @@ export class LootBoxCommitReveal extends Contract {
     // Effects before interactions: clear the commit, then make the external
     // beacon call. (A revert undoes both, and the beacon cannot re-enter us.)
     this.commitRound(Txn.sender).delete()
-    return this.drawRandomness(target, Txn.sender)
+    const randomValue: uint64 = this.drawRandomness(target, Txn.sender)
+
+    emit('Revealed', new arc4.Address(Txn.sender), new arc4.Uint64(target), new arc4.Uint64(randomValue))
+    return randomValue
   }
 
   // Reclaim an EXPIRED commit. Permissionless: an expired commit can never be

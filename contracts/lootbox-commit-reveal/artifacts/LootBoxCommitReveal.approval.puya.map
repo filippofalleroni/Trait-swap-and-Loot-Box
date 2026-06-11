@@ -3,7 +3,7 @@
   "sources": [
     "../contract.algo.ts"
   ],
-  "mappings": ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;AAsCA;;AAAA;AAAA;AAAA;;AAAA;;;AAAA;;;;;;;;;;;;;;;;;;;;;;;;;;;AAAA;;;AAAA;;;;;;;;;;;;AAAA;AAAA;;;;;;AAAA;;;AAAA;;;;AAAA;AAOG;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAEC;;;AAFD;AAAA;AAKA;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAEQ;;AAAe;;AAAf;AAAP;AACA;;;AAHD;AAAA;AAUQ;;AAAP;AACgC;;AAAwB;AAAxB;AAAhB;AAAA;;AAAA;AAAA;AAAA;AACT;AAAA;;AAAqB;AAtBZ;AAsBY;AAAA;AAArB;AAAP;AACO;AAAA;;AAAkB;AAtBd;AAsBc;AAAA;AAAlB;AAAP;AACO;;AAAmB;;AAAnB;AAAP;AAzBY;AA6Ba;;AA7Bb;AA6BJ;AAAA;;AAAD;AAAP;AAEqC;;AA/BzB;AA+BK;;AA/BL;AA+BZ;AAAA;AAAA;AAdD;AAAA;AAjBa;AAoCY;;AApCZ;AAoCL;AAAA;;AAAP;AApCY;AAqC+B;;AArC/B;AAqCc;AAAA;AAAA;AA8CF;AA/EV;AA+EU;AAAA;AAChB;AAAA;AAAsB;;AAAtB;AAAD;AA5CA;;AAAA;;AAAA;AAAP;AACO;;AAAe;;AAAY;;;AAAZ;AAAf;AAAP;AAzCY;AA6CK;;AA7CL;AA6CZ;;AACmC;;AA8CjC;AAEW;AA3FH;;AA2FG;AAAA;AAGL;;AAAA;AACA;;;;AAAA;;AAAA;AAFA;;;;;;;;;;;;;;;AAJN;;;;AAQS;;;AART;AAAA;;AADU;AAAA;;;AAYV;;AAZU;AAAA;AAzDb;;;AAAA;;AAAA;AAAA;AAAA;AAAA;AAAA;AAkBA;;;AAAA;AAAA;AAAA;AAAA;AAAA;AApDa;AAAA;AAAA;AAsDL;AAAA;AAAA;;AAAP;AACkB;AAAA;AAAA;AAAA;AACX;;AAAgB;AAAY;;;AAAZ;AAAhB;AAAP;AACA;;AALD;AAAA;AAUA;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAEQ;;AAAe;;AAAf;AAAP;AACA;AAAyB;;;;;;AAAzB;;;AAAqE;;;AAArE;AAHD;AAAA;AAQD;;;AACE;;AAAA;AACA;;AAAA;AACA;;AAAA;AAxEgB;AAyEhB;;AAAA;AAxEW;AAyEX;;AAAA;AAxEU;;AAyEV;;AAAA;AAxEc;AAyEd;;AAAA;",
+  "mappings": ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;AA2CA;;AAAA;AAAA;AAAA;;AAAA;;;AAAA;;;;;;;;;;;;;;;;;;;;;;;;;;;AAAA;;;AAAA;;;;;;;;;;;;AAAA;AAAA;;;;;;AAAA;;;AAAA;;;;AAAA;AAOG;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAEC;;;AAFD;AAAA;AAKA;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAEQ;;AAAe;;AAAf;AAAP;AACA;;;AAHD;AAAA;AAMA;;AAAA;AAAA;AAAA;AAAA;;AAAA;AAAA;AAAA;AAIQ;AAAA;;AAAqB;AApBZ;AAoBY;AAAA;AAArB;AAAP;AACO;AAAA;;AAAkB;AApBd;AAoBc;AAAA;AAAlB;AAAP;AACO;;AAAmB;;AAAnB;AAAP;AAvBY;AA2Ba;;AA3Bb;AA2BJ;AAAA;;AAAD;AAAP;AAEqC;;AA7BzB;AA6BK;;AA7BL;AA6BZ;AAAA;AAAA;AACmC;;AAA6B;;AAAhB;AAAhD;AAAA;;;;;;AAAA;AAAA;AAAA;AAbD;AAAA;AAjBa;AAmCY;;AAnCZ;AAmCL;AAAA;;AAAP;AAnCY;AAoC+B;;AApC/B;AAoCc;AAAA;AAAA;AAiDF;AAjFV;AAiFU;AAAA;AAChB;AAAA;AAAsB;;AAAtB;AAAD;AA/CA;;AAAA;;AAAA;AAAP;AACO;;AAAe;;AAAY;;;AAAZ;AAAf;AAAP;AAxCY;AA4CK;;AA5CL;AA4CZ;;AACwD;;AAiDtD;AAEW;AA7FH;;AA6FG;AAAA;AAGL;;AAAA;AACA;;;;AAAA;;AAAA;AAFA;;;;;;;;;;;;;;;;;AAJN;;;;AAQS;;;AART;AAAA;;AADU;AAAA;;;AAYV;;AAZU;AAAA;AA9CsB;;AAAsC;AAAA;;;AAAxE;AAAA;;AAAA;AAAA;;AAAA;AAAA;;;;;;AAAA;AAAA;AAAA;AAdD;;AAAA;AAAA;AAAA;AAAA;AAAA;AAqBA;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAtDa;AAAA;AAAA;AAwDL;AAAA;AAAA;;AAAP;AACkB;AAAA;AAAA;AAAA;AACX;;AAAgB;AAAY;;;AAAZ;AAAhB;AAAP;AACA;;AALD;AAAA;AAUA;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAEQ;;AAAe;;AAAf;AAAP;AACA;AAAyB;;;;;;AAAzB;;;AAAqE;;;AAArE;AAHD;AAAA;AAQD;;;AACE;;AAAA;AACA;;AAAA;AACA;;AAAA;AA1EgB;AA2EhB;;AAAA;AA1EW;AA2EX;;AAAA;AA1EU;;AA2EV;;AAAA;AA1Ec;AA2Ed;;AAAA;",
   "op_pc_offset": 0,
   "pc_events": {
     "1": {
@@ -53,9 +53,9 @@
       "stack_out": []
     },
     "55": {
-      "op": "pushbytess 0x67652bc0 0x49326b0e 0x750ec9b5 0x7ae9e943 0x21f1ddff // method \"configure(address,uint64,uint64,uint64)void\", method \"commit()void\", method \"reveal()uint64\", method \"reclaim(address)void\", method \"withdraw(uint64)void\"",
+      "op": "pushbytess 0x67652bc0 0x27a358db 0x750ec9b5 0x7ae9e943 0x21f1ddff // method \"configure(address,uint64,uint64,uint64)void\", method \"commit(pay)void\", method \"reveal()uint64\", method \"reclaim(address)void\", method \"withdraw(uint64)void\"",
       "defined_out": [
-        "Method(commit()void)",
+        "Method(commit(pay)void)",
         "Method(configure(address,uint64,uint64,uint64)void)",
         "Method(reclaim(address)void)",
         "Method(reveal()uint64)",
@@ -63,7 +63,7 @@
       ],
       "stack_out": [
         "Method(configure(address,uint64,uint64,uint64)void)",
-        "Method(commit()void)",
+        "Method(commit(pay)void)",
         "Method(reveal()uint64)",
         "Method(reclaim(address)void)",
         "Method(withdraw(uint64)void)"
@@ -72,7 +72,7 @@
     "82": {
       "op": "txna ApplicationArgs 0",
       "defined_out": [
-        "Method(commit()void)",
+        "Method(commit(pay)void)",
         "Method(configure(address,uint64,uint64,uint64)void)",
         "Method(reclaim(address)void)",
         "Method(reveal()uint64)",
@@ -81,7 +81,7 @@
       ],
       "stack_out": [
         "Method(configure(address,uint64,uint64,uint64)void)",
-        "Method(commit()void)",
+        "Method(commit(pay)void)",
         "Method(reveal()uint64)",
         "Method(reclaim(address)void)",
         "Method(withdraw(uint64)void)",
@@ -921,31 +921,17 @@
       ]
     },
     "200": {
-      "error": "Commit must follow its payment in the group",
-      "op": "assert // Commit must follow its payment in the group",
-      "stack_out": []
-    },
-    "201": {
-      "op": "txn GroupIndex",
-      "defined_out": [
-        "tmp%2#0"
-      ],
-      "stack_out": [
-        "tmp%2#0"
-      ]
-    },
-    "203": {
       "op": "intc_0 // 1",
       "defined_out": [
         "1",
-        "tmp%2#0"
+        "tmp%0#0"
       ],
       "stack_out": [
-        "tmp%2#0",
+        "tmp%0#0",
         "1"
       ]
     },
-    "204": {
+    "201": {
       "op": "-",
       "defined_out": [
         "payment#0"
@@ -954,7 +940,7 @@
         "payment#0"
       ]
     },
-    "205": {
+    "202": {
       "op": "dup",
       "defined_out": [
         "payment#0",
@@ -965,7 +951,7 @@
         "payment#0 (copy)"
       ]
     },
-    "206": {
+    "203": {
       "op": "gtxns TypeEnum",
       "defined_out": [
         "gtxn_type%0#0",
@@ -976,7 +962,7 @@
         "gtxn_type%0#0"
       ]
     },
-    "208": {
+    "205": {
       "op": "intc_0 // pay",
       "defined_out": [
         "gtxn_type%0#0",
@@ -989,7 +975,7 @@
         "pay"
       ]
     },
-    "209": {
+    "206": {
       "op": "==",
       "defined_out": [
         "gtxn_type_matches%0#0",
@@ -1000,219 +986,219 @@
         "gtxn_type_matches%0#0"
       ]
     },
-    "210": {
+    "207": {
       "error": "transaction type is pay",
       "op": "assert // transaction type is pay",
       "stack_out": [
         "payment#0"
       ]
     },
-    "211": {
+    "208": {
       "op": "dup",
       "stack_out": [
         "payment#0",
         "payment#0 (copy)"
       ]
     },
-    "212": {
+    "209": {
       "op": "gtxns Receiver",
       "defined_out": [
         "payment#0",
-        "tmp%3#0"
+        "tmp%0#1"
       ],
       "stack_out": [
         "payment#0",
-        "tmp%3#0"
+        "tmp%0#1"
       ]
     },
-    "214": {
+    "211": {
       "op": "intc_2 // 0",
       "defined_out": [
         "0",
         "payment#0",
-        "tmp%3#0"
+        "tmp%0#1"
       ],
       "stack_out": [
         "payment#0",
-        "tmp%3#0",
+        "tmp%0#1",
         "0"
       ]
     },
-    "215": {
+    "212": {
       "op": "bytec_1 // \"treasury\"",
       "defined_out": [
         "\"treasury\"",
         "0",
         "payment#0",
-        "tmp%3#0"
+        "tmp%0#1"
       ],
       "stack_out": [
         "payment#0",
-        "tmp%3#0",
+        "tmp%0#1",
         "0",
         "\"treasury\""
       ]
     },
-    "216": {
+    "213": {
       "op": "app_global_get_ex",
       "defined_out": [
         "maybe_exists%0#0",
         "maybe_value%0#0",
         "payment#0",
-        "tmp%3#0"
+        "tmp%0#1"
       ],
       "stack_out": [
         "payment#0",
-        "tmp%3#0",
+        "tmp%0#1",
         "maybe_value%0#0",
         "maybe_exists%0#0"
       ]
     },
-    "217": {
+    "214": {
       "error": "check GlobalState exists",
       "op": "assert // check GlobalState exists",
       "stack_out": [
         "payment#0",
-        "tmp%3#0",
+        "tmp%0#1",
         "maybe_value%0#0"
       ]
     },
-    "218": {
+    "215": {
       "op": "==",
       "defined_out": [
         "payment#0",
-        "tmp%4#0"
+        "tmp%1#0"
       ],
       "stack_out": [
         "payment#0",
-        "tmp%4#0"
+        "tmp%1#0"
       ]
     },
-    "219": {
+    "216": {
       "error": "Payment must go to the treasury",
       "op": "assert // Payment must go to the treasury",
       "stack_out": [
         "payment#0"
       ]
     },
-    "220": {
+    "217": {
       "op": "dup",
       "stack_out": [
         "payment#0",
         "payment#0 (copy)"
       ]
     },
-    "221": {
+    "218": {
       "op": "gtxns Amount",
       "defined_out": [
         "payment#0",
-        "tmp%5#0"
+        "tmp%2#0"
       ],
       "stack_out": [
         "payment#0",
-        "tmp%5#0"
+        "tmp%2#0"
       ]
     },
-    "223": {
+    "220": {
       "op": "intc_2 // 0",
       "stack_out": [
         "payment#0",
-        "tmp%5#0",
+        "tmp%2#0",
         "0"
       ]
     },
-    "224": {
+    "221": {
       "op": "bytec_2 // \"price\"",
       "defined_out": [
         "\"price\"",
         "0",
         "payment#0",
-        "tmp%5#0"
+        "tmp%2#0"
       ],
       "stack_out": [
         "payment#0",
-        "tmp%5#0",
+        "tmp%2#0",
         "0",
         "\"price\""
       ]
     },
-    "225": {
+    "222": {
       "op": "app_global_get_ex",
       "defined_out": [
         "maybe_exists%1#0",
         "maybe_value%1#0",
         "payment#0",
-        "tmp%5#0"
+        "tmp%2#0"
       ],
       "stack_out": [
         "payment#0",
-        "tmp%5#0",
+        "tmp%2#0",
         "maybe_value%1#0",
         "maybe_exists%1#0"
       ]
     },
-    "226": {
+    "223": {
       "error": "check GlobalState exists",
       "op": "assert // check GlobalState exists",
       "stack_out": [
         "payment#0",
-        "tmp%5#0",
+        "tmp%2#0",
         "maybe_value%1#0"
       ]
     },
-    "227": {
+    "224": {
       "op": ">=",
       "defined_out": [
         "payment#0",
-        "tmp%6#0"
+        "tmp%3#0"
       ],
       "stack_out": [
         "payment#0",
-        "tmp%6#0"
+        "tmp%3#0"
       ]
     },
-    "228": {
+    "225": {
       "error": "Payment is below the crate price",
       "op": "assert // Payment is below the crate price",
       "stack_out": [
         "payment#0"
       ]
     },
-    "229": {
+    "226": {
       "op": "gtxns Sender",
       "defined_out": [
-        "tmp%7#0"
+        "tmp%4#0"
       ],
       "stack_out": [
-        "tmp%7#0"
+        "tmp%4#0"
+      ]
+    },
+    "228": {
+      "op": "txn Sender",
+      "defined_out": [
+        "tmp%4#0",
+        "tmp%5#0"
+      ],
+      "stack_out": [
+        "tmp%4#0",
+        "tmp%5#0"
+      ]
+    },
+    "230": {
+      "op": "==",
+      "defined_out": [
+        "tmp%6#0"
+      ],
+      "stack_out": [
+        "tmp%6#0"
       ]
     },
     "231": {
-      "op": "txn Sender",
-      "defined_out": [
-        "tmp%7#0",
-        "tmp%8#0"
-      ],
-      "stack_out": [
-        "tmp%7#0",
-        "tmp%8#0"
-      ]
-    },
-    "233": {
-      "op": "==",
-      "defined_out": [
-        "tmp%9#0"
-      ],
-      "stack_out": [
-        "tmp%9#0"
-      ]
-    },
-    "234": {
       "error": "Payment sender must match the caller",
       "op": "assert // Payment sender must match the caller",
       "stack_out": []
     },
-    "235": {
+    "232": {
       "op": "bytec_0 // \"c\"",
       "defined_out": [
         "\"c\""
@@ -1221,7 +1207,7 @@
         "\"c\""
       ]
     },
-    "236": {
+    "233": {
       "op": "txn Sender",
       "defined_out": [
         "\"c\"",
@@ -1232,7 +1218,7 @@
         "materialized_values%0#0"
       ]
     },
-    "238": {
+    "235": {
       "op": "concat",
       "defined_out": [
         "box_prefixed_key%0#0"
@@ -1241,7 +1227,7 @@
         "box_prefixed_key%0#0"
       ]
     },
-    "239": {
+    "236": {
       "op": "box_len",
       "defined_out": [
         "_%0#0",
@@ -1252,74 +1238,74 @@
         "maybe_exists%2#0"
       ]
     },
-    "240": {
+    "237": {
       "op": "bury 1",
       "stack_out": [
         "maybe_exists%2#0"
       ]
     },
-    "242": {
+    "239": {
       "op": "!",
       "defined_out": [
-        "tmp%10#0"
+        "tmp%7#0"
       ],
       "stack_out": [
-        "tmp%10#0"
+        "tmp%7#0"
       ]
     },
-    "243": {
+    "240": {
       "error": "Active commit exists \u2014 reveal or reclaim first",
       "op": "assert // Active commit exists \u2014 reveal or reclaim first",
       "stack_out": []
     },
-    "244": {
+    "241": {
       "op": "global Round",
       "defined_out": [
-        "tmp%11#0"
+        "tmp%8#0"
       ],
       "stack_out": [
-        "tmp%11#0"
+        "tmp%8#0"
       ]
     },
-    "246": {
+    "243": {
       "op": "bytec_0 // \"c\"",
       "stack_out": [
-        "tmp%11#0",
+        "tmp%8#0",
         "\"c\""
       ]
     },
-    "247": {
+    "244": {
       "op": "txn Sender",
       "defined_out": [
         "\"c\"",
         "materialized_values%1#0",
-        "tmp%11#0"
+        "tmp%8#0"
       ],
       "stack_out": [
-        "tmp%11#0",
+        "tmp%8#0",
         "\"c\"",
         "materialized_values%1#0"
       ]
     },
-    "249": {
+    "246": {
       "op": "concat",
       "defined_out": [
         "box_prefixed_key%1#0",
-        "tmp%11#0"
+        "tmp%8#0"
       ],
       "stack_out": [
-        "tmp%11#0",
+        "tmp%8#0",
         "box_prefixed_key%1#0"
       ]
     },
-    "250": {
+    "247": {
       "op": "swap",
       "stack_out": [
         "box_prefixed_key%1#0",
-        "tmp%11#0"
+        "tmp%8#0"
       ]
     },
-    "251": {
+    "248": {
       "op": "itob",
       "defined_out": [
         "box_prefixed_key%1#0",
@@ -1330,21 +1316,92 @@
         "encoded_value%0#0"
       ]
     },
-    "252": {
+    "249": {
       "op": "box_put",
       "stack_out": []
     },
-    "253": {
+    "250": {
+      "op": "txn Sender",
+      "defined_out": [
+        "reinterpret_Encoded(uint8[32])%0#0"
+      ],
+      "stack_out": [
+        "reinterpret_Encoded(uint8[32])%0#0"
+      ]
+    },
+    "252": {
+      "op": "global Round",
+      "defined_out": [
+        "reinterpret_Encoded(uint8[32])%0#0",
+        "tmp%9#0"
+      ],
+      "stack_out": [
+        "reinterpret_Encoded(uint8[32])%0#0",
+        "tmp%9#0"
+      ]
+    },
+    "254": {
+      "op": "itob",
+      "defined_out": [
+        "aggregate%val_as_bytes%0#0",
+        "reinterpret_Encoded(uint8[32])%0#0"
+      ],
+      "stack_out": [
+        "reinterpret_Encoded(uint8[32])%0#0",
+        "aggregate%val_as_bytes%0#0"
+      ]
+    },
+    "255": {
+      "op": "concat",
+      "defined_out": [
+        "aggregate%head%1#0"
+      ],
+      "stack_out": [
+        "aggregate%head%1#0"
+      ]
+    },
+    "256": {
+      "op": "pushbytes 0x33426673 // method \"Committed(address,uint64)\"",
+      "defined_out": [
+        "Method(Committed(address,uint64))",
+        "aggregate%head%1#0"
+      ],
+      "stack_out": [
+        "aggregate%head%1#0",
+        "Method(Committed(address,uint64))"
+      ]
+    },
+    "262": {
+      "op": "swap",
+      "stack_out": [
+        "Method(Committed(address,uint64))",
+        "aggregate%head%1#0"
+      ]
+    },
+    "263": {
+      "op": "concat",
+      "defined_out": [
+        "event%0#0"
+      ],
+      "stack_out": [
+        "event%0#0"
+      ]
+    },
+    "264": {
+      "op": "log",
+      "stack_out": []
+    },
+    "265": {
       "op": "intc_0 // 1",
       "stack_out": [
         "1"
       ]
     },
-    "254": {
+    "266": {
       "op": "return",
       "stack_out": []
     },
-    "255": {
+    "267": {
       "subroutine": "lootbox-commit-reveal/contract.algo.ts::LootBoxCommitReveal.reveal[routing]",
       "params": {},
       "block": "reveal",
@@ -1357,7 +1414,7 @@
         "\"c\""
       ]
     },
-    "256": {
+    "268": {
       "op": "txn Sender",
       "defined_out": [
         "\"c\"",
@@ -1368,7 +1425,7 @@
         "materialized_values%0#0"
       ]
     },
-    "258": {
+    "270": {
       "op": "concat",
       "defined_out": [
         "box_prefixed_key%0#0"
@@ -1377,7 +1434,7 @@
         "box_prefixed_key%0#0"
       ]
     },
-    "259": {
+    "271": {
       "op": "box_len",
       "defined_out": [
         "_%0#0",
@@ -1388,24 +1445,24 @@
         "maybe_exists%0#0"
       ]
     },
-    "260": {
+    "272": {
       "op": "bury 1",
       "stack_out": [
         "maybe_exists%0#0"
       ]
     },
-    "262": {
+    "274": {
       "error": "No active commit to reveal",
       "op": "assert // No active commit to reveal",
       "stack_out": []
     },
-    "263": {
+    "275": {
       "op": "bytec_0 // \"c\"",
       "stack_out": [
         "\"c\""
       ]
     },
-    "264": {
+    "276": {
       "op": "txn Sender",
       "defined_out": [
         "\"c\"",
@@ -1416,7 +1473,7 @@
         "materialized_values%1#0"
       ]
     },
-    "266": {
+    "278": {
       "op": "concat",
       "defined_out": [
         "box_prefixed_key%1#0"
@@ -1425,7 +1482,7 @@
         "box_prefixed_key%1#0"
       ]
     },
-    "267": {
+    "279": {
       "op": "box_get",
       "defined_out": [
         "aggregate%box_get%0#0",
@@ -1436,14 +1493,14 @@
         "aggregate%box_get%1#0"
       ]
     },
-    "268": {
+    "280": {
       "error": "Box must have value",
       "op": "assert // Box must have value",
       "stack_out": [
         "aggregate%box_get%0#0"
       ]
     },
-    "269": {
+    "281": {
       "op": "btoi",
       "defined_out": [
         "committed#0"
@@ -1452,7 +1509,7 @@
         "committed#0"
       ]
     },
-    "270": {
+    "282": {
       "op": "intc_2 // 0",
       "defined_out": [
         "0",
@@ -1463,7 +1520,7 @@
         "0"
       ]
     },
-    "271": {
+    "283": {
       "op": "bytec_3 // \"cadence\"",
       "defined_out": [
         "\"cadence\"",
@@ -1476,7 +1533,7 @@
         "\"cadence\""
       ]
     },
-    "272": {
+    "284": {
       "op": "app_global_get_ex",
       "defined_out": [
         "cadence#0",
@@ -1489,7 +1546,7 @@
         "maybe_exists%0#0"
       ]
     },
-    "273": {
+    "285": {
       "error": "check GlobalState exists",
       "op": "assert // check GlobalState exists",
       "stack_out": [
@@ -1497,7 +1554,7 @@
         "cadence#0"
       ]
     },
-    "274": {
+    "286": {
       "op": "dup2",
       "defined_out": [
         "cadence#0",
@@ -1512,7 +1569,7 @@
         "cadence#0 (copy)"
       ]
     },
-    "275": {
+    "287": {
       "op": "/",
       "defined_out": [
         "cadence#0",
@@ -1525,7 +1582,7 @@
         "tmp%0#0"
       ]
     },
-    "276": {
+    "288": {
       "op": "pushint 2 // 2",
       "defined_out": [
         "2",
@@ -1540,7 +1597,7 @@
         "2"
       ]
     },
-    "278": {
+    "290": {
       "op": "+",
       "defined_out": [
         "cadence#0",
@@ -1553,7 +1610,7 @@
         "tmp%1#1"
       ]
     },
-    "279": {
+    "291": {
       "op": "*",
       "defined_out": [
         "committed#0",
@@ -1564,7 +1621,7 @@
         "target#0"
       ]
     },
-    "280": {
+    "292": {
       "op": "global Round",
       "stack_out": [
         "committed#0",
@@ -1572,7 +1629,7 @@
         "tmp%1#1"
       ]
     },
-    "282": {
+    "294": {
       "op": "dig 1",
       "defined_out": [
         "committed#0",
@@ -1587,7 +1644,7 @@
         "target#0 (copy)"
       ]
     },
-    "284": {
+    "296": {
       "op": ">",
       "defined_out": [
         "committed#0",
@@ -1600,7 +1657,7 @@
         "tmp%2#1"
       ]
     },
-    "285": {
+    "297": {
       "error": "Beacon round not reached yet",
       "op": "assert // Beacon round not reached yet",
       "stack_out": [
@@ -1608,7 +1665,7 @@
         "target#0"
       ]
     },
-    "286": {
+    "298": {
       "op": "global Round",
       "defined_out": [
         "committed#0",
@@ -1621,7 +1678,7 @@
         "tmp%3#0"
       ]
     },
-    "288": {
+    "300": {
       "op": "uncover 2",
       "stack_out": [
         "target#0",
@@ -1629,7 +1686,7 @@
         "committed#0"
       ]
     },
-    "290": {
+    "302": {
       "op": "pushint 400 // 400",
       "defined_out": [
         "400",
@@ -1644,7 +1701,7 @@
         "400"
       ]
     },
-    "293": {
+    "305": {
       "op": "+",
       "defined_out": [
         "target#0",
@@ -1657,7 +1714,7 @@
         "tmp%4#0"
       ]
     },
-    "294": {
+    "306": {
       "op": "<",
       "defined_out": [
         "target#0",
@@ -1668,21 +1725,21 @@
         "tmp%5#0"
       ]
     },
-    "295": {
+    "307": {
       "error": "Commit expired \u2014 call reclaim() and recommit",
       "op": "assert // Commit expired \u2014 call reclaim() and recommit",
       "stack_out": [
         "target#0"
       ]
     },
-    "296": {
+    "308": {
       "op": "bytec_0 // \"c\"",
       "stack_out": [
         "target#0",
         "\"c\""
       ]
     },
-    "297": {
+    "309": {
       "op": "txn Sender",
       "defined_out": [
         "\"c\"",
@@ -1695,7 +1752,7 @@
         "materialized_values%2#0"
       ]
     },
-    "299": {
+    "311": {
       "op": "concat",
       "defined_out": [
         "box_prefixed_key%2#0",
@@ -1706,7 +1763,7 @@
         "box_prefixed_key%2#0"
       ]
     },
-    "300": {
+    "312": {
       "op": "box_del",
       "defined_out": [
         "target#0",
@@ -1717,13 +1774,13 @@
         "{box_del}"
       ]
     },
-    "301": {
+    "313": {
       "op": "pop",
       "stack_out": [
         "target#0"
       ]
     },
-    "302": {
+    "314": {
       "op": "txn Sender",
       "defined_out": [
         "account#0",
@@ -1734,10 +1791,10 @@
         "account#0"
       ]
     },
-    "304": {
+    "316": {
       "op": "itxn_begin"
     },
-    "305": {
+    "317": {
       "op": "intc_2 // 0",
       "stack_out": [
         "target#0",
@@ -1745,7 +1802,7 @@
         "0"
       ]
     },
-    "306": {
+    "318": {
       "op": "bytec 4 // \"beacon\"",
       "defined_out": [
         "\"beacon\"",
@@ -1760,7 +1817,7 @@
         "\"beacon\""
       ]
     },
-    "308": {
+    "320": {
       "op": "app_global_get_ex",
       "defined_out": [
         "account#0",
@@ -1775,7 +1832,7 @@
         "maybe_exists%0#0"
       ]
     },
-    "309": {
+    "321": {
       "error": "check GlobalState exists",
       "op": "assert // check GlobalState exists",
       "stack_out": [
@@ -1784,7 +1841,7 @@
         "maybe_value%0#0"
       ]
     },
-    "310": {
+    "322": {
       "op": "uncover 2",
       "stack_out": [
         "account#0",
@@ -1792,7 +1849,7 @@
         "target#0"
       ]
     },
-    "312": {
+    "324": {
       "op": "itob",
       "defined_out": [
         "account#0",
@@ -1805,7 +1862,7 @@
         "aggregate%val_as_bytes%0#0"
       ]
     },
-    "313": {
+    "325": {
       "op": "pushbytes 0x0020",
       "defined_out": [
         "0x0020",
@@ -1820,7 +1877,7 @@
         "0x0020"
       ]
     },
-    "317": {
+    "329": {
       "op": "uncover 3",
       "stack_out": [
         "maybe_value%0#0",
@@ -1829,7 +1886,7 @@
         "account#0"
       ]
     },
-    "319": {
+    "331": {
       "op": "concat",
       "defined_out": [
         "aggregate%encoded_value%0#0",
@@ -1842,7 +1899,7 @@
         "aggregate%encoded_value%0#0"
       ]
     },
-    "320": {
+    "332": {
       "op": "pushbytes 0x47c20c23 // method \"must_get(uint64,byte[])byte[]\"",
       "defined_out": [
         "Method(must_get(uint64,byte[])byte[])",
@@ -1857,7 +1914,7 @@
         "Method(must_get(uint64,byte[])byte[])"
       ]
     },
-    "326": {
+    "338": {
       "op": "itxn_field ApplicationArgs",
       "stack_out": [
         "maybe_value%0#0",
@@ -1865,415 +1922,303 @@
         "aggregate%encoded_value%0#0"
       ]
     },
-    "328": {
-      "op": "swap",
+    "340": {
+      "op": "dig 1",
+      "defined_out": [
+        "aggregate%encoded_value%0#0",
+        "aggregate%val_as_bytes%0#0",
+        "aggregate%val_as_bytes%0#0 (copy)",
+        "maybe_value%0#0"
+      ],
       "stack_out": [
         "maybe_value%0#0",
+        "aggregate%val_as_bytes%0#0",
         "aggregate%encoded_value%0#0",
-        "aggregate%val_as_bytes%0#0"
+        "aggregate%val_as_bytes%0#0 (copy)"
       ]
     },
-    "329": {
+    "342": {
       "op": "itxn_field ApplicationArgs",
       "stack_out": [
         "maybe_value%0#0",
+        "aggregate%val_as_bytes%0#0",
         "aggregate%encoded_value%0#0"
       ]
     },
-    "331": {
+    "344": {
       "op": "itxn_field ApplicationArgs",
       "stack_out": [
-        "maybe_value%0#0"
-      ]
-    },
-    "333": {
-      "op": "itxn_field ApplicationID",
-      "stack_out": []
-    },
-    "335": {
-      "op": "pushint 6 // 6",
-      "defined_out": [
-        "6"
-      ],
-      "stack_out": [
-        "6"
-      ]
-    },
-    "337": {
-      "op": "itxn_field TypeEnum",
-      "stack_out": []
-    },
-    "339": {
-      "op": "intc_2 // 0",
-      "stack_out": [
-        "0"
-      ]
-    },
-    "340": {
-      "op": "itxn_field Fee",
-      "stack_out": []
-    },
-    "342": {
-      "op": "itxn_submit"
-    },
-    "343": {
-      "op": "itxn LastLog",
-      "defined_out": [
-        "awst_tmp%0#0"
-      ],
-      "stack_out": [
-        "awst_tmp%0#0"
-      ]
-    },
-    "345": {
-      "op": "dup",
-      "defined_out": [
-        "awst_tmp%0#0",
-        "awst_tmp%0#0 (copy)"
-      ],
-      "stack_out": [
-        "awst_tmp%0#0",
-        "awst_tmp%0#0 (copy)"
+        "maybe_value%0#0",
+        "aggregate%val_as_bytes%0#0"
       ]
     },
     "346": {
+      "op": "swap",
+      "stack_out": [
+        "aggregate%val_as_bytes%0#0",
+        "maybe_value%0#0"
+      ]
+    },
+    "347": {
+      "op": "itxn_field ApplicationID",
+      "stack_out": [
+        "aggregate%val_as_bytes%0#0"
+      ]
+    },
+    "349": {
+      "op": "pushint 6 // 6",
+      "defined_out": [
+        "6",
+        "aggregate%val_as_bytes%0#0"
+      ],
+      "stack_out": [
+        "aggregate%val_as_bytes%0#0",
+        "6"
+      ]
+    },
+    "351": {
+      "op": "itxn_field TypeEnum",
+      "stack_out": [
+        "aggregate%val_as_bytes%0#0"
+      ]
+    },
+    "353": {
+      "op": "intc_2 // 0",
+      "stack_out": [
+        "aggregate%val_as_bytes%0#0",
+        "0"
+      ]
+    },
+    "354": {
+      "op": "itxn_field Fee",
+      "stack_out": [
+        "aggregate%val_as_bytes%0#0"
+      ]
+    },
+    "356": {
+      "op": "itxn_submit"
+    },
+    "357": {
+      "op": "itxn LastLog",
+      "defined_out": [
+        "aggregate%val_as_bytes%0#0",
+        "awst_tmp%0#0"
+      ],
+      "stack_out": [
+        "aggregate%val_as_bytes%0#0",
+        "awst_tmp%0#0"
+      ]
+    },
+    "359": {
+      "op": "dup",
+      "defined_out": [
+        "aggregate%val_as_bytes%0#0",
+        "awst_tmp%0#0",
+        "awst_tmp%0#0 (copy)"
+      ],
+      "stack_out": [
+        "aggregate%val_as_bytes%0#0",
+        "awst_tmp%0#0",
+        "awst_tmp%0#0 (copy)"
+      ]
+    },
+    "360": {
       "op": "extract 0 4",
       "defined_out": [
+        "aggregate%val_as_bytes%0#0",
         "awst_tmp%0#0",
         "tmp%3#1"
       ],
       "stack_out": [
+        "aggregate%val_as_bytes%0#0",
         "awst_tmp%0#0",
         "tmp%3#1"
       ]
     },
-    "349": {
+    "363": {
       "op": "bytec 5 // 0x151f7c75",
       "defined_out": [
         "0x151f7c75",
+        "aggregate%val_as_bytes%0#0",
         "awst_tmp%0#0",
         "tmp%3#1"
       ],
       "stack_out": [
+        "aggregate%val_as_bytes%0#0",
         "awst_tmp%0#0",
         "tmp%3#1",
         "0x151f7c75"
       ]
     },
-    "351": {
+    "365": {
       "op": "==",
       "defined_out": [
+        "aggregate%val_as_bytes%0#0",
         "awst_tmp%0#0",
         "tmp%4#1"
       ],
       "stack_out": [
+        "aggregate%val_as_bytes%0#0",
         "awst_tmp%0#0",
         "tmp%4#1"
       ]
     },
-    "352": {
+    "366": {
       "error": "Bytes has valid prefix",
       "op": "assert // Bytes has valid prefix",
       "stack_out": [
+        "aggregate%val_as_bytes%0#0",
         "awst_tmp%0#0"
       ]
     },
-    "353": {
+    "367": {
+      "op": "txn Sender",
+      "defined_out": [
+        "aggregate%val_as_bytes%0#0",
+        "awst_tmp%0#0",
+        "reinterpret_Encoded(uint8[32])%0#0"
+      ],
+      "stack_out": [
+        "aggregate%val_as_bytes%0#0",
+        "awst_tmp%0#0",
+        "reinterpret_Encoded(uint8[32])%0#0"
+      ]
+    },
+    "369": {
+      "op": "swap",
+      "stack_out": [
+        "aggregate%val_as_bytes%0#0",
+        "reinterpret_Encoded(uint8[32])%0#0",
+        "awst_tmp%0#0"
+      ]
+    },
+    "370": {
       "op": "extract 6 8",
       "defined_out": [
+        "aggregate%val_as_bytes%0#0",
+        "aggregate%val_as_bytes%1#0",
+        "reinterpret_Encoded(uint8[32])%0#0"
+      ],
+      "stack_out": [
+        "aggregate%val_as_bytes%0#0",
+        "reinterpret_Encoded(uint8[32])%0#0",
+        "aggregate%val_as_bytes%1#0"
+      ]
+    },
+    "373": {
+      "op": "swap",
+      "stack_out": [
+        "aggregate%val_as_bytes%0#0",
+        "aggregate%val_as_bytes%1#0",
+        "reinterpret_Encoded(uint8[32])%0#0"
+      ]
+    },
+    "374": {
+      "op": "uncover 2",
+      "stack_out": [
+        "aggregate%val_as_bytes%1#0",
+        "reinterpret_Encoded(uint8[32])%0#0",
+        "aggregate%val_as_bytes%0#0"
+      ]
+    },
+    "376": {
+      "op": "concat",
+      "defined_out": [
+        "aggregate%head%1#0",
         "aggregate%val_as_bytes%1#0"
       ],
+      "stack_out": [
+        "aggregate%val_as_bytes%1#0",
+        "aggregate%head%1#0"
+      ]
+    },
+    "377": {
+      "op": "dig 1",
+      "defined_out": [
+        "aggregate%head%1#0",
+        "aggregate%val_as_bytes%1#0",
+        "aggregate%val_as_bytes%1#0 (copy)"
+      ],
+      "stack_out": [
+        "aggregate%val_as_bytes%1#0",
+        "aggregate%head%1#0",
+        "aggregate%val_as_bytes%1#0 (copy)"
+      ]
+    },
+    "379": {
+      "op": "concat",
+      "defined_out": [
+        "aggregate%head%2#0",
+        "aggregate%val_as_bytes%1#0"
+      ],
+      "stack_out": [
+        "aggregate%val_as_bytes%1#0",
+        "aggregate%head%2#0"
+      ]
+    },
+    "380": {
+      "op": "pushbytes 0xbd519e89 // method \"Revealed(address,uint64,uint64)\"",
+      "defined_out": [
+        "Method(Revealed(address,uint64,uint64))",
+        "aggregate%head%2#0",
+        "aggregate%val_as_bytes%1#0"
+      ],
+      "stack_out": [
+        "aggregate%val_as_bytes%1#0",
+        "aggregate%head%2#0",
+        "Method(Revealed(address,uint64,uint64))"
+      ]
+    },
+    "386": {
+      "op": "swap",
+      "stack_out": [
+        "aggregate%val_as_bytes%1#0",
+        "Method(Revealed(address,uint64,uint64))",
+        "aggregate%head%2#0"
+      ]
+    },
+    "387": {
+      "op": "concat",
+      "defined_out": [
+        "aggregate%val_as_bytes%1#0",
+        "event%0#0"
+      ],
+      "stack_out": [
+        "aggregate%val_as_bytes%1#0",
+        "event%0#0"
+      ]
+    },
+    "388": {
+      "op": "log",
       "stack_out": [
         "aggregate%val_as_bytes%1#0"
       ]
     },
-    "356": {
+    "389": {
       "op": "bytec 5 // 0x151f7c75",
       "stack_out": [
         "aggregate%val_as_bytes%1#0",
         "0x151f7c75"
       ]
     },
-    "358": {
+    "391": {
       "op": "swap",
       "stack_out": [
         "0x151f7c75",
         "aggregate%val_as_bytes%1#0"
       ]
     },
-    "359": {
-      "op": "concat",
-      "defined_out": [
-        "tmp%2#0"
-      ],
-      "stack_out": [
-        "tmp%2#0"
-      ]
-    },
-    "360": {
-      "op": "log",
-      "stack_out": []
-    },
-    "361": {
-      "op": "intc_0 // 1",
-      "defined_out": [
-        "1"
-      ],
-      "stack_out": [
-        "1"
-      ]
-    },
-    "362": {
-      "op": "return",
-      "stack_out": []
-    },
-    "363": {
-      "subroutine": "lootbox-commit-reveal/contract.algo.ts::LootBoxCommitReveal.reclaim[routing]",
-      "params": {},
-      "block": "reclaim",
-      "stack_in": [],
-      "op": "txna ApplicationArgs 1",
-      "defined_out": [
-        "target#0"
-      ],
-      "stack_out": [
-        "target#0"
-      ]
-    },
-    "366": {
-      "op": "dup",
-      "defined_out": [
-        "target#0",
-        "target#0 (copy)"
-      ],
-      "stack_out": [
-        "target#0",
-        "target#0 (copy)"
-      ]
-    },
-    "367": {
-      "op": "len",
-      "defined_out": [
-        "len%0#0",
-        "target#0"
-      ],
-      "stack_out": [
-        "target#0",
-        "len%0#0"
-      ]
-    },
-    "368": {
-      "op": "intc_3 // 32",
-      "defined_out": [
-        "32",
-        "len%0#0",
-        "target#0"
-      ],
-      "stack_out": [
-        "target#0",
-        "len%0#0",
-        "32"
-      ]
-    },
-    "369": {
-      "op": "==",
-      "defined_out": [
-        "eq%0#0",
-        "target#0"
-      ],
-      "stack_out": [
-        "target#0",
-        "eq%0#0"
-      ]
-    },
-    "370": {
-      "error": "invalid number of bytes for arc4.static_array<arc4.uint8, 32>",
-      "op": "assert // invalid number of bytes for arc4.static_array<arc4.uint8, 32>",
-      "stack_out": [
-        "target#0"
-      ]
-    },
-    "371": {
-      "op": "bytec_0 // \"c\"",
-      "defined_out": [
-        "\"c\"",
-        "target#0"
-      ],
-      "stack_out": [
-        "target#0",
-        "\"c\""
-      ]
-    },
-    "372": {
-      "op": "swap",
-      "stack_out": [
-        "\"c\"",
-        "target#0"
-      ]
-    },
-    "373": {
-      "op": "concat",
-      "defined_out": [
-        "box_prefixed_key%0#0"
-      ],
-      "stack_out": [
-        "box_prefixed_key%0#0"
-      ]
-    },
-    "374": {
-      "op": "dup",
-      "defined_out": [
-        "box_prefixed_key%0#0",
-        "box_prefixed_key%0#0 (copy)"
-      ],
-      "stack_out": [
-        "box_prefixed_key%0#0",
-        "box_prefixed_key%0#0 (copy)"
-      ]
-    },
-    "375": {
-      "op": "box_len",
-      "defined_out": [
-        "_%0#0",
-        "box_prefixed_key%0#0",
-        "maybe_exists%0#0"
-      ],
-      "stack_out": [
-        "box_prefixed_key%0#0",
-        "_%0#0",
-        "maybe_exists%0#0"
-      ]
-    },
-    "376": {
-      "op": "bury 1",
-      "stack_out": [
-        "box_prefixed_key%0#0",
-        "maybe_exists%0#0"
-      ]
-    },
-    "378": {
-      "error": "No commit to reclaim",
-      "op": "assert // No commit to reclaim",
-      "stack_out": [
-        "box_prefixed_key%0#0"
-      ]
-    },
-    "379": {
-      "op": "dup",
-      "stack_out": [
-        "box_prefixed_key%0#0",
-        "box_prefixed_key%0#0 (copy)"
-      ]
-    },
-    "380": {
-      "op": "box_get",
-      "defined_out": [
-        "aggregate%box_get%0#0",
-        "aggregate%box_get%1#0",
-        "box_prefixed_key%0#0"
-      ],
-      "stack_out": [
-        "box_prefixed_key%0#0",
-        "aggregate%box_get%0#0",
-        "aggregate%box_get%1#0"
-      ]
-    },
-    "381": {
-      "op": "pop",
-      "stack_out": [
-        "box_prefixed_key%0#0",
-        "aggregate%box_get%0#0"
-      ]
-    },
-    "382": {
-      "op": "btoi",
-      "defined_out": [
-        "box_prefixed_key%0#0",
-        "committed#0"
-      ],
-      "stack_out": [
-        "box_prefixed_key%0#0",
-        "committed#0"
-      ]
-    },
-    "383": {
-      "op": "global Round",
-      "defined_out": [
-        "box_prefixed_key%0#0",
-        "committed#0",
-        "tmp%0#1"
-      ],
-      "stack_out": [
-        "box_prefixed_key%0#0",
-        "committed#0",
-        "tmp%0#1"
-      ]
-    },
-    "385": {
-      "op": "swap",
-      "stack_out": [
-        "box_prefixed_key%0#0",
-        "tmp%0#1",
-        "committed#0"
-      ]
-    },
-    "386": {
-      "op": "pushint 400 // 400",
-      "defined_out": [
-        "400",
-        "box_prefixed_key%0#0",
-        "committed#0",
-        "tmp%0#1"
-      ],
-      "stack_out": [
-        "box_prefixed_key%0#0",
-        "tmp%0#1",
-        "committed#0",
-        "400"
-      ]
-    },
-    "389": {
-      "op": "+",
-      "defined_out": [
-        "box_prefixed_key%0#0",
-        "tmp%0#1",
-        "tmp%1#1"
-      ],
-      "stack_out": [
-        "box_prefixed_key%0#0",
-        "tmp%0#1",
-        "tmp%1#1"
-      ]
-    },
-    "390": {
-      "op": ">=",
-      "defined_out": [
-        "box_prefixed_key%0#0",
-        "tmp%2#0"
-      ],
-      "stack_out": [
-        "box_prefixed_key%0#0",
-        "tmp%2#0"
-      ]
-    },
-    "391": {
-      "error": "Commit has not expired yet",
-      "op": "assert // Commit has not expired yet",
-      "stack_out": [
-        "box_prefixed_key%0#0"
-      ]
-    },
     "392": {
-      "op": "box_del",
+      "op": "concat",
       "defined_out": [
-        "{box_del}"
+        "tmp%2#0"
       ],
       "stack_out": [
-        "{box_del}"
+        "tmp%2#0"
       ]
     },
     "393": {
-      "op": "pop",
+      "op": "log",
       "stack_out": []
     },
     "394": {
@@ -2290,6 +2235,268 @@
       "stack_out": []
     },
     "396": {
+      "subroutine": "lootbox-commit-reveal/contract.algo.ts::LootBoxCommitReveal.reclaim[routing]",
+      "params": {},
+      "block": "reclaim",
+      "stack_in": [],
+      "op": "txna ApplicationArgs 1",
+      "defined_out": [
+        "target#0"
+      ],
+      "stack_out": [
+        "target#0"
+      ]
+    },
+    "399": {
+      "op": "dup",
+      "defined_out": [
+        "target#0",
+        "target#0 (copy)"
+      ],
+      "stack_out": [
+        "target#0",
+        "target#0 (copy)"
+      ]
+    },
+    "400": {
+      "op": "len",
+      "defined_out": [
+        "len%0#0",
+        "target#0"
+      ],
+      "stack_out": [
+        "target#0",
+        "len%0#0"
+      ]
+    },
+    "401": {
+      "op": "intc_3 // 32",
+      "defined_out": [
+        "32",
+        "len%0#0",
+        "target#0"
+      ],
+      "stack_out": [
+        "target#0",
+        "len%0#0",
+        "32"
+      ]
+    },
+    "402": {
+      "op": "==",
+      "defined_out": [
+        "eq%0#0",
+        "target#0"
+      ],
+      "stack_out": [
+        "target#0",
+        "eq%0#0"
+      ]
+    },
+    "403": {
+      "error": "invalid number of bytes for arc4.static_array<arc4.uint8, 32>",
+      "op": "assert // invalid number of bytes for arc4.static_array<arc4.uint8, 32>",
+      "stack_out": [
+        "target#0"
+      ]
+    },
+    "404": {
+      "op": "bytec_0 // \"c\"",
+      "defined_out": [
+        "\"c\"",
+        "target#0"
+      ],
+      "stack_out": [
+        "target#0",
+        "\"c\""
+      ]
+    },
+    "405": {
+      "op": "swap",
+      "stack_out": [
+        "\"c\"",
+        "target#0"
+      ]
+    },
+    "406": {
+      "op": "concat",
+      "defined_out": [
+        "box_prefixed_key%0#0"
+      ],
+      "stack_out": [
+        "box_prefixed_key%0#0"
+      ]
+    },
+    "407": {
+      "op": "dup",
+      "defined_out": [
+        "box_prefixed_key%0#0",
+        "box_prefixed_key%0#0 (copy)"
+      ],
+      "stack_out": [
+        "box_prefixed_key%0#0",
+        "box_prefixed_key%0#0 (copy)"
+      ]
+    },
+    "408": {
+      "op": "box_len",
+      "defined_out": [
+        "_%0#0",
+        "box_prefixed_key%0#0",
+        "maybe_exists%0#0"
+      ],
+      "stack_out": [
+        "box_prefixed_key%0#0",
+        "_%0#0",
+        "maybe_exists%0#0"
+      ]
+    },
+    "409": {
+      "op": "bury 1",
+      "stack_out": [
+        "box_prefixed_key%0#0",
+        "maybe_exists%0#0"
+      ]
+    },
+    "411": {
+      "error": "No commit to reclaim",
+      "op": "assert // No commit to reclaim",
+      "stack_out": [
+        "box_prefixed_key%0#0"
+      ]
+    },
+    "412": {
+      "op": "dup",
+      "stack_out": [
+        "box_prefixed_key%0#0",
+        "box_prefixed_key%0#0 (copy)"
+      ]
+    },
+    "413": {
+      "op": "box_get",
+      "defined_out": [
+        "aggregate%box_get%0#0",
+        "aggregate%box_get%1#0",
+        "box_prefixed_key%0#0"
+      ],
+      "stack_out": [
+        "box_prefixed_key%0#0",
+        "aggregate%box_get%0#0",
+        "aggregate%box_get%1#0"
+      ]
+    },
+    "414": {
+      "op": "pop",
+      "stack_out": [
+        "box_prefixed_key%0#0",
+        "aggregate%box_get%0#0"
+      ]
+    },
+    "415": {
+      "op": "btoi",
+      "defined_out": [
+        "box_prefixed_key%0#0",
+        "committed#0"
+      ],
+      "stack_out": [
+        "box_prefixed_key%0#0",
+        "committed#0"
+      ]
+    },
+    "416": {
+      "op": "global Round",
+      "defined_out": [
+        "box_prefixed_key%0#0",
+        "committed#0",
+        "tmp%0#1"
+      ],
+      "stack_out": [
+        "box_prefixed_key%0#0",
+        "committed#0",
+        "tmp%0#1"
+      ]
+    },
+    "418": {
+      "op": "swap",
+      "stack_out": [
+        "box_prefixed_key%0#0",
+        "tmp%0#1",
+        "committed#0"
+      ]
+    },
+    "419": {
+      "op": "pushint 400 // 400",
+      "defined_out": [
+        "400",
+        "box_prefixed_key%0#0",
+        "committed#0",
+        "tmp%0#1"
+      ],
+      "stack_out": [
+        "box_prefixed_key%0#0",
+        "tmp%0#1",
+        "committed#0",
+        "400"
+      ]
+    },
+    "422": {
+      "op": "+",
+      "defined_out": [
+        "box_prefixed_key%0#0",
+        "tmp%0#1",
+        "tmp%1#1"
+      ],
+      "stack_out": [
+        "box_prefixed_key%0#0",
+        "tmp%0#1",
+        "tmp%1#1"
+      ]
+    },
+    "423": {
+      "op": ">=",
+      "defined_out": [
+        "box_prefixed_key%0#0",
+        "tmp%2#0"
+      ],
+      "stack_out": [
+        "box_prefixed_key%0#0",
+        "tmp%2#0"
+      ]
+    },
+    "424": {
+      "error": "Commit has not expired yet",
+      "op": "assert // Commit has not expired yet",
+      "stack_out": [
+        "box_prefixed_key%0#0"
+      ]
+    },
+    "425": {
+      "op": "box_del",
+      "defined_out": [
+        "{box_del}"
+      ],
+      "stack_out": [
+        "{box_del}"
+      ]
+    },
+    "426": {
+      "op": "pop",
+      "stack_out": []
+    },
+    "427": {
+      "op": "intc_0 // 1",
+      "defined_out": [
+        "1"
+      ],
+      "stack_out": [
+        "1"
+      ]
+    },
+    "428": {
+      "op": "return",
+      "stack_out": []
+    },
+    "429": {
       "subroutine": "lootbox-commit-reveal/contract.algo.ts::LootBoxCommitReveal.withdraw[routing]",
       "params": {},
       "block": "withdraw",
@@ -2302,7 +2509,7 @@
         "tmp%0#0"
       ]
     },
-    "399": {
+    "432": {
       "op": "dup",
       "defined_out": [
         "tmp%0#0",
@@ -2313,7 +2520,7 @@
         "tmp%0#0 (copy)"
       ]
     },
-    "400": {
+    "433": {
       "op": "len",
       "defined_out": [
         "len%0#0",
@@ -2324,7 +2531,7 @@
         "len%0#0"
       ]
     },
-    "401": {
+    "434": {
       "op": "intc_1 // 8",
       "defined_out": [
         "8",
@@ -2337,7 +2544,7 @@
         "8"
       ]
     },
-    "402": {
+    "435": {
       "op": "==",
       "defined_out": [
         "eq%0#0",
@@ -2348,14 +2555,14 @@
         "eq%0#0"
       ]
     },
-    "403": {
+    "436": {
       "error": "invalid number of bytes for arc4.uint64",
       "op": "assert // invalid number of bytes for arc4.uint64",
       "stack_out": [
         "tmp%0#0"
       ]
     },
-    "404": {
+    "437": {
       "op": "btoi",
       "defined_out": [
         "amount#0"
@@ -2364,7 +2571,7 @@
         "amount#0"
       ]
     },
-    "405": {
+    "438": {
       "op": "txn Sender",
       "defined_out": [
         "amount#0",
@@ -2375,7 +2582,7 @@
         "tmp%0#1"
       ]
     },
-    "407": {
+    "440": {
       "op": "global CreatorAddress",
       "defined_out": [
         "amount#0",
@@ -2388,7 +2595,7 @@
         "tmp%1#1"
       ]
     },
-    "409": {
+    "442": {
       "op": "==",
       "defined_out": [
         "amount#0",
@@ -2399,17 +2606,17 @@
         "tmp%2#0"
       ]
     },
-    "410": {
+    "443": {
       "error": "Only the creator can withdraw",
       "op": "assert // Only the creator can withdraw",
       "stack_out": [
         "amount#0"
       ]
     },
-    "411": {
+    "444": {
       "op": "itxn_begin"
     },
-    "412": {
+    "445": {
       "op": "global CreatorAddress",
       "defined_out": [
         "amount#0",
@@ -2420,14 +2627,14 @@
         "inner_txn_params%0%%param_Receiver_idx_0#0"
       ]
     },
-    "414": {
+    "447": {
       "op": "itxn_field Receiver"
     },
-    "416": {
+    "449": {
       "op": "itxn_field Amount",
       "stack_out": []
     },
-    "418": {
+    "451": {
       "op": "intc_0 // 1",
       "defined_out": [
         "1"
@@ -2436,11 +2643,11 @@
         "1"
       ]
     },
-    "419": {
+    "452": {
       "op": "itxn_field TypeEnum",
       "stack_out": []
     },
-    "421": {
+    "454": {
       "op": "intc_2 // 0",
       "defined_out": [
         "0"
@@ -2449,24 +2656,24 @@
         "0"
       ]
     },
-    "422": {
+    "455": {
       "op": "itxn_field Fee",
       "stack_out": []
     },
-    "424": {
+    "457": {
       "op": "itxn_submit"
     },
-    "425": {
+    "458": {
       "op": "intc_0 // 1",
       "stack_out": [
         "1"
       ]
     },
-    "426": {
+    "459": {
       "op": "return",
       "stack_out": []
     },
-    "427": {
+    "460": {
       "subroutine": "lootbox-commit-reveal/contract.algo.ts::LootBoxCommitReveal.setConfig",
       "params": {
         "treasury#0": "bytes",
@@ -2478,7 +2685,7 @@
       "stack_in": [],
       "op": "proto 4 0"
     },
-    "430": {
+    "463": {
       "op": "frame_dig -3",
       "defined_out": [
         "price#0 (copy)"
@@ -2487,12 +2694,12 @@
         "price#0 (copy)"
       ]
     },
-    "432": {
+    "465": {
       "error": "Crate price must be positive",
       "op": "assert // Crate price must be positive",
       "stack_out": []
     },
-    "433": {
+    "466": {
       "op": "frame_dig -2",
       "defined_out": [
         "beaconApp#0 (copy)"
@@ -2501,12 +2708,12 @@
         "beaconApp#0 (copy)"
       ]
     },
-    "435": {
+    "468": {
       "error": "Beacon app id is required",
       "op": "assert // Beacon app id is required",
       "stack_out": []
     },
-    "436": {
+    "469": {
       "op": "frame_dig -1",
       "defined_out": [
         "beaconCadence#0 (copy)"
@@ -2515,12 +2722,12 @@
         "beaconCadence#0 (copy)"
       ]
     },
-    "438": {
+    "471": {
       "error": "Beacon cadence must be positive",
       "op": "assert // Beacon cadence must be positive",
       "stack_out": []
     },
-    "439": {
+    "472": {
       "op": "bytec_1 // \"treasury\"",
       "defined_out": [
         "\"treasury\""
@@ -2529,7 +2736,7 @@
         "\"treasury\""
       ]
     },
-    "440": {
+    "473": {
       "op": "frame_dig -4",
       "defined_out": [
         "\"treasury\"",
@@ -2540,11 +2747,11 @@
         "treasury#0 (copy)"
       ]
     },
-    "442": {
+    "475": {
       "op": "app_global_put",
       "stack_out": []
     },
-    "443": {
+    "476": {
       "op": "bytec_2 // \"price\"",
       "defined_out": [
         "\"price\""
@@ -2553,18 +2760,18 @@
         "\"price\""
       ]
     },
-    "444": {
+    "477": {
       "op": "frame_dig -3",
       "stack_out": [
         "\"price\"",
         "price#0 (copy)"
       ]
     },
-    "446": {
+    "479": {
       "op": "app_global_put",
       "stack_out": []
     },
-    "447": {
+    "480": {
       "op": "bytec 4 // \"beacon\"",
       "defined_out": [
         "\"beacon\""
@@ -2573,18 +2780,18 @@
         "\"beacon\""
       ]
     },
-    "449": {
+    "482": {
       "op": "frame_dig -2",
       "stack_out": [
         "\"beacon\"",
         "beaconApp#0 (copy)"
       ]
     },
-    "451": {
+    "484": {
       "op": "app_global_put",
       "stack_out": []
     },
-    "452": {
+    "485": {
       "op": "bytec_3 // \"cadence\"",
       "defined_out": [
         "\"cadence\""
@@ -2593,18 +2800,18 @@
         "\"cadence\""
       ]
     },
-    "453": {
+    "486": {
       "op": "frame_dig -1",
       "stack_out": [
         "\"cadence\"",
         "beaconCadence#0 (copy)"
       ]
     },
-    "455": {
+    "488": {
       "op": "app_global_put",
       "stack_out": []
     },
-    "456": {
+    "489": {
       "retsub": true,
       "op": "retsub"
     }

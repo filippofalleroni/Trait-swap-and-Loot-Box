@@ -8,14 +8,14 @@ The contract implements a commit-reveal pattern backed by the **Algorand Randomn
 
 ### Flow
 
-1. **Commit**: The user sends an atomic group containing a payment to the treasury (for at least the crate price) followed by an app call to `commit()`. The contract verifies the payment and records the current round.
+1. **Commit**: The user sends an atomic group containing a payment to the treasury (for at least the crate price) and an app call to `commit(payment)` that references that payment as its transaction argument. The contract verifies the payment and records the current round.
 2. **Wait**: The user waits until the Beacon has published the target round (see below) — a short wait of roughly `2 × cadence` rounds.
 3. **Reveal**: The user calls `reveal()` on-chain. The contract **deterministically** computes a future Beacon round from the commit round and the configured cadence (`target = (commitRound / cadence + 2) × cadence`), fetches that round's VRF value from the Beacon via `must_get(round, user_data)` — passing the caller's address as `user_data` so each account gets an independent draw — extracts a random `uint64`, deletes the commit box, and returns the value via ABI return. Because the target round is computed (not chosen by the caller), the outcome cannot be ground by picking a favourable round.
 4. **Distribute**: The server verifies the on-chain reveal transaction, reads the ABI return value from the transaction logs, and uses it to determine the prize.
 
 ### Payment Enforcement
 
-The `commit()` method verifies that the preceding transaction in the atomic group is a payment to the treasury address for at least the configured crate price, from the same sender. This means:
+The `commit(payment)` method takes the payment as an ARC-4 transaction argument and verifies it pays the treasury at least the configured crate price, from the same account that is committing. This means:
 
 - The contract **enforces** that every commit is paid for — no one can call `commit()` without paying.
 - The treasury address, crate price, Beacon app id, and Beacon cadence are stored in global state and set at deployment via `createApplication()`.
@@ -95,10 +95,23 @@ The Randomness Beacon is **not** available on LocalNet, so test the live flow on
 |--------|-------------|
 | `createApplication(treasury, price, beaconApp, beaconCadence)` | Deploy-time setup. Stores the treasury, crate price, Beacon app id, and Beacon cadence in global state. |
 | `configure(treasury, price, beaconApp, beaconCadence)` | Creator-only. Updates any of the above. |
-| `commit()` | Verifies the preceding payment in the atomic group (correct receiver, amount, sender). Rejects if the sender already has an active commit. Records the current round. |
-| `reveal()` | Deterministically derives a future Beacon round from the commit, fetches its VRF value via the Beacon's `must_get` (bound to the caller's address), returns a random `uint64`, and deletes the commit box. Reverts before the target round and after the 400-round expiry. |
+| `commit(payment)` | Takes the payment as a transaction argument and verifies it (correct receiver, amount, sender). Rejects if the sender already has an active commit. Records the current round and emits `Committed`. |
+| `reveal()` | Deterministically derives a future Beacon round from the commit, fetches its VRF value via the Beacon's `must_get` (bound to the caller's address), returns a random `uint64`, deletes the commit box, and emits `Revealed`. Reverts before the target round and after the 400-round expiry. |
 | `reclaim(target)` | Deletes an **expired** commit for any account, freeing its box and returning the MBR to the app account. Permissionless — an expired commit can never be revealed, so anyone may sweep dead boxes. |
 | `withdraw(amount)` | Creator-only. Sends `amount` microALGO from the app account to the creator (recovers freed box MBR / excess funding). The AVM keeps the app at or above its minimum balance, so outstanding commit boxes can never be under-funded. |
+
+## Events (ARC-28)
+
+The contract emits two ARC-28 events so off-chain indexers can follow the
+lifecycle and anyone can audit fairness:
+
+| Event | Fields | Emitted by |
+|-------|--------|------------|
+| `Committed` | `account: address`, `commitRound: uint64` | `commit(payment)` |
+| `Revealed` | `account: address`, `beaconRound: uint64`, `value: uint64` | `reveal()` |
+
+A `Revealed` event is independently verifiable: anyone can call the Beacon's
+`must_get(beaconRound, account)` and confirm `value == extractUint64(result)`.
 
 ## Build Exclusion
 
