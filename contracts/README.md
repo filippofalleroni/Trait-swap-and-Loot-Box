@@ -109,7 +109,7 @@ use the app's preview mode, which doesn't touch the contract.
 |--------|-------------|
 | `createApplication(treasury, price, beaconApp, beaconCadence)` | Deploy-time setup. Stores the treasury, crate price, Beacon app id, and Beacon cadence in global state. |
 | `configure(treasury, price, beaconApp, beaconCadence)` | Creator-only. Updates any of the above. |
-| `commit(payment)` | Takes the payment as a transaction argument and verifies it (correct receiver, amount, sender). Rejects if the sender already has an active commit. Records the current round and emits `Committed`. |
+| `commit(payment)` | Takes the payment as a transaction argument and verifies it (correct receiver, amount, sender). Rejects if the sender already has an active commit. Stores the locked target beacon round and emits `Committed`. |
 | `reveal()` | Deterministically derives a future Beacon round from the commit, fetches its VRF value via the Beacon's `must_get` (bound to the caller's address), returns a random `uint64`, deletes the commit box, and emits `Revealed`. Reverts before the target round and after the 400-round expiry. |
 | `reclaim(target)` | Deletes an **expired** commit for any account, freeing its box and returning the MBR to the app account. Permissionless — an expired commit can never be revealed, so anyone may sweep dead boxes. |
 | `withdraw(amount)` | Creator-only. Sends `amount` microALGO from the app account to the creator (recovers freed box MBR / excess funding). The AVM keeps the app at or above its minimum balance, so outstanding commit boxes can never be under-funded. |
@@ -121,11 +121,11 @@ lifecycle and anyone can audit fairness:
 
 | Event | Fields | Emitted by |
 |-------|--------|------------|
-| `Committed` | `account: address`, `commitRound: uint64` | `commit(payment)` |
-| `Revealed` | `account: address`, `beaconRound: uint64`, `value: uint64` | `reveal()` |
+| `Committed` | `account: address`, `target: uint64` | `commit(payment)` |
+| `Revealed` | `account: address`, `target: uint64`, `value: uint64` | `reveal()` |
 
 A `Revealed` event is independently verifiable: anyone can call the Beacon's
-`must_get(beaconRound, account)` and confirm `value == extractUint64(result)`.
+`must_get(target, account)` and confirm `value == extractUint64(result)`.
 
 ## Build Exclusion
 

@@ -43,6 +43,11 @@ const MIN_DELAY_SLOTS: uint64 = 2
 // after this, the commit can be reclaimed.
 const REVEAL_WINDOW_ROUNDS: uint64 = 400
 
+// ARC-28 events with named fields, so off-chain consumers see
+// `{ account, target, value }` rather than positional args.
+class Committed extends arc4.Struct<{ account: arc4.Address; target: arc4.Uint64 }> {}
+class Revealed extends arc4.Struct<{ account: arc4.Address; target: arc4.Uint64; value: arc4.Uint64 }> {}
+
 export class LootBoxCommitReveal extends Contract {
   // Per account: the locked target beacon round to draw randomness from.
   commitTarget = BoxMap<Account, uint64>({ keyPrefix: 'c' })
@@ -79,7 +84,7 @@ export class LootBoxCommitReveal extends Contract {
     // Lock the target beacon round now, so later config changes can't move it.
     const target: uint64 = this.targetRound(Global.round)
     this.commitTarget(account).value = target
-    emit('Committed', new arc4.Address(account), new arc4.Uint64(target))
+    emit(new Committed({ account: new arc4.Address(account), target: new arc4.Uint64(target) }))
   }
 
   @abimethod()
@@ -96,7 +101,7 @@ export class LootBoxCommitReveal extends Contract {
     this.commitTarget(account).delete()
     const randomValue: uint64 = this.drawRandomness(target, account)
 
-    emit('Revealed', new arc4.Address(account), new arc4.Uint64(target), new arc4.Uint64(randomValue))
+    emit(new Revealed({ account: new arc4.Address(account), target: new arc4.Uint64(target), value: new arc4.Uint64(randomValue) }))
     return randomValue
   }
 
