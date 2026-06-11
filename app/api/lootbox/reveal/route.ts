@@ -4,8 +4,8 @@ import algosdk from "algosdk";
 import { INDEXER_BASE_URL } from "@/lib/algorand";
 import { getTreasuryAddress } from "@/lib/treasury";
 import { resolvePrize } from "@/lib/lootbox-prize-resolver";
-import { distributePrize } from "@/lib/lootbox-distributor";
-import { getLootboxMasterAccount } from "@/lib/lootbox-master-wallet";
+import { distributePrize, findExistingDistribution } from "@/lib/lootbox-distributor";
+import { getLootboxMasterAccount, getLootboxMasterAddress } from "@/lib/lootbox-master-wallet";
 import { getAlgodClient } from "@/lib/algorand";
 import { getPrizes } from "@/lib/lootbox-prize-store";
 import type { PrizeTier } from "@/lib/types";
@@ -136,7 +136,6 @@ function safeErrorMessage(error: unknown): string {
 export async function POST(request: NextRequest) {
   let claimedTxId: string | null = null;
   let claimedRevealTxId: string | null = null;
-  let distributionAttempted = false;
 
   try {
     const clientIp = getClientIp(request);
@@ -189,28 +188,54 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const prizes: PrizeTier[] = await getPrizes();
+    if (prizes.length === 0) {
+      return NextResponse.json(
+        { error: "No prizes are currently available." },
+        { status: 500 }
+      );
+    }
+
+    // Idempotency: if this payment already has an on-chain distribution, the
+    // user already received their prize (a previous response may have been
+    // lost). Return success instead of re-distributing. This both recovers a
+    // stuck retry and prevents any double payout — even across cold starts,
+    // because the proof of delivery lives on-chain, not in memory.
+    if (LOOTBOX_LIVE && CONTRACT_APP_ID) {
+      const prior = await findExistingDistribution(getLootboxMasterAddress(), paymentTxId);
+      if (prior) {
+        const wonPrize = prizes.find((p) => p.id === prior.prizeId);
+        return NextResponse.json({
+          prize: wonPrize
+            ? {
+                id: wonPrize.id,
+                name: wonPrize.name,
+                type: wonPrize.type,
+                rarity: wonPrize.rarity,
+                color: wonPrize.color,
+              }
+            : undefined,
+          paymentTxId,
+          distributionTxId: prior.txId,
+          status: "already_distributed",
+        });
+      }
+    }
+
     pruneUsedTxIds();
+    // In-flight lock (per serverless instance): block a second *concurrent*
+    // request for the same payment, but release it in `finally` so a later
+    // retry is never permanently dead-ended. The durable guard against a double
+    // payout is the on-chain idempotency check above and in the distributor.
     if (usedPaymentTxIds.has(paymentTxId)) {
       return NextResponse.json(
-        { error: "This transaction has already been used." },
+        { error: "This loot box is already being processed. Please wait a moment." },
         { status: 409 }
       );
     }
     usedPaymentTxIds.add(paymentTxId);
     usedTxTimestamps.set(paymentTxId, Date.now());
     claimedTxId = paymentTxId;
-
-    const prizes: PrizeTier[] = await getPrizes();
-    if (prizes.length === 0) {
-      if (claimedTxId) {
-        usedPaymentTxIds.delete(claimedTxId);
-        usedTxTimestamps.delete(claimedTxId);
-      }
-      return NextResponse.json(
-        { error: "No prizes are currently available." },
-        { status: 500 }
-      );
-    }
 
     const treasuryAddress = getTreasuryAddress();
     const algodClient = getAlgodClient();
@@ -288,19 +313,16 @@ export async function POST(request: NextRequest) {
     }
 
     if (usedRevealTxIds.has(revealTxId)) {
-      if (claimedTxId) {
-        usedPaymentTxIds.delete(claimedTxId);
-        usedTxTimestamps.delete(claimedTxId);
-      }
       return NextResponse.json(
-        { error: "This transaction has already been used." },
+        { error: "This loot box is already being processed. Please wait a moment." },
         { status: 409 }
       );
     }
 
     // Claim the revealTxId immediately to prevent a race condition where
     // two concurrent requests both pass the has() check above before
-    // either reaches the add(). Same pattern as paymentTxId above.
+    // either reaches the add(). Released in `finally`, so it's an in-flight
+    // lock rather than a permanent burn. Same pattern as paymentTxId above.
     usedRevealTxIds.add(revealTxId);
     usedTxTimestamps.set(revealTxId, Date.now());
     claimedRevealTxId = revealTxId;
@@ -340,22 +362,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    distributionAttempted = true;
-
     let distributionTxId: string;
     try {
       const masterAccount = getLootboxMasterAccount();
-      distributionTxId = await distributePrize({
+      const distResult = await distributePrize({
         prize,
         recipientAddress: walletAddress,
         masterAccount,
         algodClient,
+        paymentTxId,
       });
+      distributionTxId = distResult.txId;
     } catch (distErr: unknown) {
       console.error("[lootbox/reveal] Distribution failed:", distErr);
-      // Do NOT release paymentTxId or revealTxId here — the on-chain
-      // distribution transaction may still confirm. The user should
-      // contact support for manual resolution.
+      // The in-flight locks are released in `finally`, so the user can safely
+      // retry — distributePrize is idempotent on paymentTxId and will reuse an
+      // existing on-chain transfer rather than sending a second one.
       return NextResponse.json(
         {
           error: "Prize distribution failed. Please contact support.",
@@ -385,24 +407,24 @@ export async function POST(request: NextRequest) {
       status: "success",
     });
   } catch (err: unknown) {
-    // Only release claimed txIds for pre-distribution validation errors
-    // so the user can retry. Once distribution was attempted, do NOT release
-    // — the on-chain tx may still confirm, and releasing enables double-dist.
-    if (!distributionAttempted) {
-      if (claimedTxId) {
-        usedPaymentTxIds.delete(claimedTxId);
-        usedTxTimestamps.delete(claimedTxId);
-      }
-      if (claimedRevealTxId) {
-        usedRevealTxIds.delete(claimedRevealTxId);
-        usedTxTimestamps.delete(claimedRevealTxId);
-      }
-    }
     console.error("[lootbox/reveal]", err);
     return NextResponse.json(
       { error: safeErrorMessage(err) },
       { status: 500 }
     );
+  } finally {
+    // Always release the in-flight locks. The durable guard against a double
+    // payout is the on-chain idempotency check (here and in the distributor),
+    // not these in-memory sets — so releasing lets a later retry recover
+    // without ever risking a re-send.
+    if (claimedTxId) {
+      usedPaymentTxIds.delete(claimedTxId);
+      usedTxTimestamps.delete(claimedTxId);
+    }
+    if (claimedRevealTxId) {
+      usedRevealTxIds.delete(claimedRevealTxId);
+      usedTxTimestamps.delete(claimedRevealTxId);
+    }
   }
 }
 

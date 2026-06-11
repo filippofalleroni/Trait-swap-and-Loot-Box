@@ -1,5 +1,6 @@
 import algosdk from "algosdk";
 import type { PrizeTier } from "./types";
+import { INDEXER_BASE_URL } from "./algorand";
 
 /**
  * Server-only module for distributing loot box prizes.
@@ -7,6 +8,63 @@ import type { PrizeTier } from "./types";
  * Sends the won prize (token transfer or NFT transfer) from the
  * master wallet to the winner's address.
  */
+
+const DISTRIBUTION_NOTE_PREFIX = "lootbox-prize:";
+
+/**
+ * Distribution note format: `lootbox-prize:<paymentTxId>:<prizeId>`.
+ *
+ * The paymentTxId comes first so an existing delivery for a given payment can
+ * be located with a single indexer note-prefix query. This is what ties an
+ * off-chain payment to its on-chain payout and makes distribution idempotent.
+ */
+function buildDistributionNote(paymentTxId: string, prizeId: string): string {
+  return `${DISTRIBUTION_NOTE_PREFIX}${paymentTxId}:${prizeId}`;
+}
+
+/**
+ * Idempotency guard. Returns the existing on-chain distribution for a payment
+ * (its txId and the prize id parsed from the note), or null if none exists.
+ *
+ * This prevents a payment from ever being paid out twice — even if the server
+ * crashed or cold-started after a successful transfer, since the proof of
+ * delivery lives on-chain rather than in volatile memory.
+ */
+export async function findExistingDistribution(
+  masterAddress: string,
+  paymentTxId: string
+): Promise<{ txId: string; prizeId: string | null } | null> {
+  try {
+    const prefix = `${DISTRIBUTION_NOTE_PREFIX}${paymentTxId}:`;
+    const notePrefixB64 = Buffer.from(prefix).toString("base64");
+    // No tx-type filter: a prize may be an ALGO payment OR an asset transfer.
+    const url =
+      `${INDEXER_BASE_URL}/v2/transactions` +
+      `?address=${masterAddress}&address-role=sender` +
+      `&note-prefix=${encodeURIComponent(notePrefixB64)}&limit=1`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const txn = data?.transactions?.[0];
+    if (!txn?.id) return null;
+
+    let prizeId: string | null = null;
+    if (typeof txn.note === "string") {
+      try {
+        const decoded = Buffer.from(txn.note, "base64").toString("utf-8");
+        if (decoded.startsWith(prefix)) {
+          prizeId = decoded.slice(prefix.length) || null;
+        }
+      } catch {
+        // Non-UTF8 note — ignore; the txId alone is enough to dedupe.
+      }
+    }
+    return { txId: txn.id, prizeId };
+  } catch {
+    // On indexer error, return null rather than blocking a legitimate delivery.
+    return null;
+  }
+}
 
 /**
  * Verify that the recipient has opted in to the prize asset before
@@ -47,16 +105,26 @@ export async function distributePrize({
   recipientAddress,
   masterAccount,
   algodClient,
+  paymentTxId,
 }: {
   prize: PrizeTier;
   recipientAddress: string;
   masterAccount: algosdk.Account;
   algodClient: algosdk.Algodv2;
-}): Promise<string> {
-  // Pre-flight balance check: verify the master wallet can cover the prize
+  paymentTxId: string;
+}): Promise<{ txId: string; alreadyDistributed: boolean }> {
   // masterAccount.addr is an Address object in algosdk v3; use .toString()
   // for string contexts to avoid implicit coercion issues.
   const masterAddr = masterAccount.addr.toString();
+
+  // Idempotency: if this payment already has an on-chain distribution, reuse it
+  // instead of sending again.
+  const existing = await findExistingDistribution(masterAddr, paymentTxId);
+  if (existing) {
+    return { txId: existing.txId, alreadyDistributed: true };
+  }
+
+  // Pre-flight balance check: verify the master wallet can cover the prize.
   const masterInfo = (await algodClient
     .accountInformation(masterAddr)
     .do()) as unknown as Record<string, unknown>;
@@ -87,57 +155,56 @@ export async function distributePrize({
     }
   }
 
-  const suggestedParams = await algodClient.getTransactionParams().do();
-
-  // Include the prize ID in the transaction note for audit trail
-  const note = new TextEncoder().encode(`lootbox-prize:${prize.id}`);
-
-  let txn: algosdk.Transaction;
-
-  if (prize.assetId === 0) {
-    // ALGO prize — send a payment transaction (no opt-in needed)
-    txn = algosdk.makePaymentTxnWithSuggestedParamsFromObject({
-      sender: masterAddr,
-      receiver: recipientAddress,
-      amount: prize.amount,
-      suggestedParams,
-      note,
-    });
-  } else {
-    // ASA prize — verify opt-in, then send asset transfer
+  // ASA prizes require the recipient to have opted in first.
+  if (prize.assetId !== 0) {
     await verifyRecipientOptedIn(algodClient, recipientAddress, prize.assetId);
-
-    txn = algosdk.makeAssetTransferTxnWithSuggestedParamsFromObject({
-      sender: masterAddr,
-      receiver: recipientAddress,
-      assetIndex: prize.assetId,
-      amount: prize.type === "nft" ? 1 : prize.amount,
-      suggestedParams,
-      note,
-    });
   }
+
+  const suggestedParams = await algodClient.getTransactionParams().do();
+  const note = new TextEncoder().encode(buildDistributionNote(paymentTxId, prize.id));
+
+  // Build and sign the transfer ONCE so every retry resends the *same* txid.
+  // Algorand dedupes by txid, so even if a send's waitForConfirmation timed out
+  // on a txn that actually landed, resending can never produce a second
+  // transfer — the network commits this txid at most once.
+  const txn =
+    prize.assetId === 0
+      ? algosdk.makePaymentTxnWithSuggestedParamsFromObject({
+          sender: masterAddr,
+          receiver: recipientAddress,
+          amount: prize.amount,
+          suggestedParams,
+          note,
+        })
+      : algosdk.makeAssetTransferTxnWithSuggestedParamsFromObject({
+          sender: masterAddr,
+          receiver: recipientAddress,
+          assetIndex: prize.assetId,
+          amount: prize.type === "nft" ? 1 : prize.amount,
+          suggestedParams,
+          note,
+        });
+
+  const signedTxn = txn.signTxn(masterAccount.sk);
+  const txId = txn.txID();
 
   let lastError: unknown;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const sp = attempt === 0 ? suggestedParams : await algodClient.getTransactionParams().do();
-      const retryTxn = attempt === 0 ? txn : (() => {
-        if (prize.assetId === 0) {
-          return algosdk.makePaymentTxnWithSuggestedParamsFromObject({
-            sender: masterAddr, receiver: recipientAddress, amount: prize.amount, suggestedParams: sp, note,
-          });
-        }
-        return algosdk.makeAssetTransferTxnWithSuggestedParamsFromObject({
-          sender: masterAddr, receiver: recipientAddress, assetIndex: prize.assetId,
-          amount: prize.type === "nft" ? 1 : prize.amount, suggestedParams: sp, note,
-        });
-      })();
-      const signedTxn = retryTxn.signTxn(masterAccount.sk);
-      const { txid } = await algodClient.sendRawTransaction(signedTxn).do();
-      await algosdk.waitForConfirmation(algodClient, txid as string, 10);
-      return txid as string;
+      await algodClient.sendRawTransaction(signedTxn).do();
+      await algosdk.waitForConfirmation(algodClient, txId, 10);
+      return { txId, alreadyDistributed: false };
     } catch (error) {
       lastError = error;
+      // The send may have failed because the txn already confirmed (a prior
+      // attempt landed, or "transaction already in ledger"). Re-confirm the
+      // exact txid before deciding to retry.
+      try {
+        await algosdk.waitForConfirmation(algodClient, txId, 3);
+        return { txId, alreadyDistributed: false };
+      } catch {
+        // Still not in the ledger — fall through to retry.
+      }
       if (attempt < 2) {
         console.warn(`[lootbox-distributor] Attempt ${attempt + 1} failed, retrying...`, error);
         await new Promise((resolve) => setTimeout(resolve, 2000));
