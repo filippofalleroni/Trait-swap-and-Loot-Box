@@ -1,6 +1,6 @@
 # Loot Box Commit-Reveal Smart Contract
 
-This directory contains the TEALScript source for the commit-reveal randomness contract used by the loot box system.
+This directory contains the Algorand TypeScript (Puya) source for the commit-reveal randomness contract used by the loot box system.
 
 ## Overview
 
@@ -43,17 +43,18 @@ If you need multiple random values from a single seed (e.g. rolling several dice
 
 ### Prerequisites
 
-- [AlgoKit](https://developer.algorand.org/docs/get-started/algokit/) installed
-- TEALScript compiler (`npm install --save-dev @algorandfoundation/tealscript`)
+- [AlgoKit](https://developer.algorand.org/docs/get-started/algokit/) installed (provides the Puya compiler)
+- Node.js 22+
 
-Pre-compiled TEAL artifacts are included in the `artifacts/` directory (ARC-32, ARC-56 app specs, approval/clear programs, and source map). You only need to recompile if you modify the contract.
+Pre-compiled artifacts are included in the `artifacts/` directory (ARC-32 / ARC-56 app specs, approval/clear TEAL, and Puya source maps). You only need to recompile if you modify the contract.
 
 ### Steps
 
-1. Compile the contract (run from the `contracts/` directory so it picks up the local `tsconfig.json`):
+1. Install the compiler toolchain and build (run from the `contracts/` directory):
    ```bash
    cd contracts
-   npx tealscript lootbox-commit-reveal/contract.algo.ts lootbox-commit-reveal/artifacts --skip-algod
+   npm install
+   npm run build   # algokit compile ts lootbox-commit-reveal --output-source-map --out-dir artifacts
    ```
 
 2. Deploy using AlgoKit or `goal`. The `createApplication` call requires two arguments:
@@ -102,4 +103,4 @@ Then deploy to LocalNet and run the loot box flow end-to-end.
 
 ## Build Exclusion
 
-This directory is excluded from the Next.js TypeScript build via `tsconfig.json` — it's reference source only. The `@algorandfoundation/tealscript` import does not need to be installed in the project's `node_modules`.
+This directory is a self-contained Puya project with its own `package.json` and `node_modules`, separate from the Next.js app. It is excluded from the Next.js TypeScript build, so the `@algorandfoundation/algorand-typescript` import is only resolved when building the contract from within `contracts/`.

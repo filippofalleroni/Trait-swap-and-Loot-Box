@@ -25,7 +25,7 @@ An open-source template for adding **trait swapping** (ARC-19 metadata updates) 
 | NFT Standard | ARC-19 (mutable metadata via reserve address) |
 | IPFS | Pinata pinning API |
 | Image Composition | sharp (server-side PNG layering) |
-| Smart Contract | TEALScript (commit-reveal with VRF) |
+| Smart Contract | Algorand TypeScript / Puya (commit-reveal with VRF) |
 | Styling | Tailwind CSS |
 | Deployment | Vercel (recommended) or self-hosted |
 
@@ -175,15 +175,13 @@ Deploy your own instance of the commit-reveal contract before enabling live loot
 Summary:
 
 ```bash
-# Pre-compiled TEAL artifacts are included -- you only need to recompile if
+# Pre-compiled artifacts are included -- you only need to recompile if
 # you modify the contract source.
 
-# (Optional) Install TEALScript compiler
-npm install --save-dev @algorandfoundation/tealscript
-
-# (Optional) Recompile -- run from the contracts/ directory
+# (Optional) Recompile with the Puya compiler -- run from the contracts/ directory
 cd contracts
-npx tealscript lootbox-commit-reveal/contract.algo.ts lootbox-commit-reveal/artifacts --skip-algod
+npm install
+npm run build   # algokit compile ts lootbox-commit-reveal --output-source-map --out-dir artifacts
 
 # Deploy using AlgoKit or goal
 # createApplication requires: treasury address, crate price in microALGO

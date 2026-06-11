@@ -1,0 +1,1553 @@
+{
+  "version": 3,
+  "sources": [
+    "../contract.algo.ts"
+  ],
+  "mappings": ";;;;;;;;;;;;;;;;;;;;;;;;;;AAkCA;;AAAA;AAAA;AAAA;;AAAA;;;AAAA;;;;;;;;;;;;;;;;;;;;;;AAAA;;;AAAA;;;;;;;;;;AAAA;AAAA;;;;;;AAAA;;;AAAA;;;;AAAA;AAKG;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAHiB;AAKhB;;AAAA;AAJW;AAKX;AAAA;AAHD;AAAA;AAMA;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAEQ;;AAAe;;AAAf;AAAP;AAXgB;AAYhB;;AAAA;AAXW;AAYX;AAAA;AAJD;AAAA;AAWQ;;AAAP;AACgC;;AAAwB;AAAxB;AAAhB;AAAA;;AAAA;AAAA;AAAA;AACT;AAAA;;AAAqB;AAtBZ;AAsBY;AAAA;AAArB;AAAP;AACO;AAAA;;AAAkB;AAtBd;AAsBc;AAAA;AAAlB;AAAP;AACO;;AAAmB;;AAAnB;AAAP;AAzBY;AA6Ba;;AA7Bb;AA6BJ;AAAA;;AAAD;AAAP;AAEqC;;AA/BzB;AA+BK;;AA/BL;AA+BZ;AAAA;AAAA;AAdD;AAAA;AAjBa;AAoCuB;;AApCvB;AAoCM;AAAA;AAAA;AAEX;;AAAe;;AAAY;AAAZ;AAAf;AAAP;AACO;;AAAe;;AAAY;;;AAAZ;AAAf;AAAP;AAKiD;AAAnB;AAAjB;;AACuB;;AAAZ;AAAV;AA7CF;AAgDK;;AAhDL;AAgDZ;;AAdD;;;AAAA;;;;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAlCa;AAsDuB;;AAtDvB;AAsDM;AAAA;AAAA;AACX;;AAAgB;AAAY;;;AAAZ;AAAhB;AAAP;AAvDY;AAwDK;;AAxDL;AAwDZ;;AAJD;AAAA",
+  "op_pc_offset": 0,
+  "pc_events": {
+    "1": {
+      "subroutine": "@algorandfoundation/algorand-typescript/arc4/index.d.ts::Contract.approvalProgram",
+      "params": {},
+      "block": "main",
+      "stack_in": [],
+      "op": "intcblock 1 8 32 0"
+    },
+    "7": {
+      "op": "bytecblock \"c\" \"treasury\" \"price\""
+    },
+    "26": {
+      "op": "txn OnCompletion",
+      "defined_out": [
+        "tmp%0#1"
+      ],
+      "stack_out": [
+        "tmp%0#1"
+      ]
+    },
+    "28": {
+      "op": "!",
+      "defined_out": [
+        "tmp%1#0"
+      ],
+      "stack_out": [
+        "tmp%1#0"
+      ]
+    },
+    "29": {
+      "error": "OnCompletion must be NoOp",
+      "op": "assert // OnCompletion must be NoOp",
+      "stack_out": []
+    },
+    "30": {
+      "op": "txn ApplicationID",
+      "defined_out": [
+        "tmp%2#0"
+      ],
+      "stack_out": [
+        "tmp%2#0"
+      ]
+    },
+    "32": {
+      "op": "bz main_create_NoOp@8",
+      "stack_out": []
+    },
+    "35": {
+      "op": "pushbytess 0x94663a6b 0x49326b0e 0x750ec9b5 0xf6f6569d // method \"configure(address,uint64)void\", method \"commit()void\", method \"reveal()uint64\", method \"reclaim()void\"",
+      "defined_out": [
+        "Method(commit()void)",
+        "Method(configure(address,uint64)void)",
+        "Method(reclaim()void)",
+        "Method(reveal()uint64)"
+      ],
+      "stack_out": [
+        "Method(configure(address,uint64)void)",
+        "Method(commit()void)",
+        "Method(reveal()uint64)",
+        "Method(reclaim()void)"
+      ]
+    },
+    "57": {
+      "op": "txna ApplicationArgs 0",
+      "defined_out": [
+        "Method(commit()void)",
+        "Method(configure(address,uint64)void)",
+        "Method(reclaim()void)",
+        "Method(reveal()uint64)",
+        "tmp%4#0"
+      ],
+      "stack_out": [
+        "Method(configure(address,uint64)void)",
+        "Method(commit()void)",
+        "Method(reveal()uint64)",
+        "Method(reclaim()void)",
+        "tmp%4#0"
+      ]
+    },
+    "60": {
+      "op": "match configure commit reveal reclaim",
+      "stack_out": []
+    },
+    "70": {
+      "op": "err"
+    },
+    "71": {
+      "block": "main_create_NoOp@8",
+      "stack_in": [],
+      "op": "pushbytes 0xcd19f1a6 // method \"createApplication(address,uint64)void\"",
+      "defined_out": [
+        "Method(createApplication(address,uint64)void)"
+      ],
+      "stack_out": [
+        "Method(createApplication(address,uint64)void)"
+      ]
+    },
+    "77": {
+      "op": "txna ApplicationArgs 0",
+      "defined_out": [
+        "Method(createApplication(address,uint64)void)",
+        "tmp%5#0"
+      ],
+      "stack_out": [
+        "Method(createApplication(address,uint64)void)",
+        "tmp%5#0"
+      ]
+    },
+    "80": {
+      "op": "match createApplication",
+      "stack_out": []
+    },
+    "84": {
+      "op": "err"
+    },
+    "85": {
+      "subroutine": "lootbox-commit-reveal/contract.algo.ts::LootBoxCommitReveal.createApplication[routing]",
+      "params": {},
+      "block": "createApplication",
+      "stack_in": [],
+      "op": "txna ApplicationArgs 1",
+      "defined_out": [
+        "treasury#0"
+      ],
+      "stack_out": [
+        "treasury#0"
+      ]
+    },
+    "88": {
+      "op": "dup",
+      "defined_out": [
+        "treasury#0",
+        "treasury#0 (copy)"
+      ],
+      "stack_out": [
+        "treasury#0",
+        "treasury#0 (copy)"
+      ]
+    },
+    "89": {
+      "op": "len",
+      "defined_out": [
+        "len%0#0",
+        "treasury#0"
+      ],
+      "stack_out": [
+        "treasury#0",
+        "len%0#0"
+      ]
+    },
+    "90": {
+      "op": "intc_2 // 32",
+      "defined_out": [
+        "32",
+        "len%0#0",
+        "treasury#0"
+      ],
+      "stack_out": [
+        "treasury#0",
+        "len%0#0",
+        "32"
+      ]
+    },
+    "91": {
+      "op": "==",
+      "defined_out": [
+        "eq%0#0",
+        "treasury#0"
+      ],
+      "stack_out": [
+        "treasury#0",
+        "eq%0#0"
+      ]
+    },
+    "92": {
+      "error": "invalid number of bytes for arc4.static_array<arc4.uint8, 32>",
+      "op": "assert // invalid number of bytes for arc4.static_array<arc4.uint8, 32>",
+      "stack_out": [
+        "treasury#0"
+      ]
+    },
+    "93": {
+      "op": "txna ApplicationArgs 2",
+      "defined_out": [
+        "tmp%2#0",
+        "treasury#0"
+      ],
+      "stack_out": [
+        "treasury#0",
+        "tmp%2#0"
+      ]
+    },
+    "96": {
+      "op": "dup",
+      "defined_out": [
+        "tmp%2#0",
+        "tmp%2#0 (copy)",
+        "treasury#0"
+      ],
+      "stack_out": [
+        "treasury#0",
+        "tmp%2#0",
+        "tmp%2#0 (copy)"
+      ]
+    },
+    "97": {
+      "op": "len",
+      "defined_out": [
+        "len%1#0",
+        "tmp%2#0",
+        "treasury#0"
+      ],
+      "stack_out": [
+        "treasury#0",
+        "tmp%2#0",
+        "len%1#0"
+      ]
+    },
+    "98": {
+      "op": "intc_1 // 8",
+      "defined_out": [
+        "8",
+        "len%1#0",
+        "tmp%2#0",
+        "treasury#0"
+      ],
+      "stack_out": [
+        "treasury#0",
+        "tmp%2#0",
+        "len%1#0",
+        "8"
+      ]
+    },
+    "99": {
+      "op": "==",
+      "defined_out": [
+        "eq%1#0",
+        "tmp%2#0",
+        "treasury#0"
+      ],
+      "stack_out": [
+        "treasury#0",
+        "tmp%2#0",
+        "eq%1#0"
+      ]
+    },
+    "100": {
+      "error": "invalid number of bytes for arc4.uint64",
+      "op": "assert // invalid number of bytes for arc4.uint64",
+      "stack_out": [
+        "treasury#0",
+        "tmp%2#0"
+      ]
+    },
+    "101": {
+      "op": "btoi",
+      "defined_out": [
+        "price#0",
+        "treasury#0"
+      ],
+      "stack_out": [
+        "treasury#0",
+        "price#0"
+      ]
+    },
+    "102": {
+      "op": "bytec_1 // \"treasury\"",
+      "defined_out": [
+        "\"treasury\"",
+        "price#0",
+        "treasury#0"
+      ],
+      "stack_out": [
+        "treasury#0",
+        "price#0",
+        "\"treasury\""
+      ]
+    },
+    "103": {
+      "op": "uncover 2",
+      "stack_out": [
+        "price#0",
+        "\"treasury\"",
+        "treasury#0"
+      ]
+    },
+    "105": {
+      "op": "app_global_put",
+      "stack_out": [
+        "price#0"
+      ]
+    },
+    "106": {
+      "op": "bytec_2 // \"price\"",
+      "defined_out": [
+        "\"price\"",
+        "price#0"
+      ],
+      "stack_out": [
+        "price#0",
+        "\"price\""
+      ]
+    },
+    "107": {
+      "op": "swap",
+      "stack_out": [
+        "\"price\"",
+        "price#0"
+      ]
+    },
+    "108": {
+      "op": "app_global_put",
+      "stack_out": []
+    },
+    "109": {
+      "op": "intc_0 // 1",
+      "defined_out": [
+        "1"
+      ],
+      "stack_out": [
+        "1"
+      ]
+    },
+    "110": {
+      "op": "return",
+      "stack_out": []
+    },
+    "111": {
+      "subroutine": "lootbox-commit-reveal/contract.algo.ts::LootBoxCommitReveal.configure[routing]",
+      "params": {},
+      "block": "configure",
+      "stack_in": [],
+      "op": "txna ApplicationArgs 1",
+      "defined_out": [
+        "treasury#0"
+      ],
+      "stack_out": [
+        "treasury#0"
+      ]
+    },
+    "114": {
+      "op": "dup",
+      "defined_out": [
+        "treasury#0",
+        "treasury#0 (copy)"
+      ],
+      "stack_out": [
+        "treasury#0",
+        "treasury#0 (copy)"
+      ]
+    },
+    "115": {
+      "op": "len",
+      "defined_out": [
+        "len%0#0",
+        "treasury#0"
+      ],
+      "stack_out": [
+        "treasury#0",
+        "len%0#0"
+      ]
+    },
+    "116": {
+      "op": "intc_2 // 32",
+      "defined_out": [
+        "32",
+        "len%0#0",
+        "treasury#0"
+      ],
+      "stack_out": [
+        "treasury#0",
+        "len%0#0",
+        "32"
+      ]
+    },
+    "117": {
+      "op": "==",
+      "defined_out": [
+        "eq%0#0",
+        "treasury#0"
+      ],
+      "stack_out": [
+        "treasury#0",
+        "eq%0#0"
+      ]
+    },
+    "118": {
+      "error": "invalid number of bytes for arc4.static_array<arc4.uint8, 32>",
+      "op": "assert // invalid number of bytes for arc4.static_array<arc4.uint8, 32>",
+      "stack_out": [
+        "treasury#0"
+      ]
+    },
+    "119": {
+      "op": "txna ApplicationArgs 2",
+      "defined_out": [
+        "tmp%2#0",
+        "treasury#0"
+      ],
+      "stack_out": [
+        "treasury#0",
+        "tmp%2#0"
+      ]
+    },
+    "122": {
+      "op": "dup",
+      "defined_out": [
+        "tmp%2#0",
+        "tmp%2#0 (copy)",
+        "treasury#0"
+      ],
+      "stack_out": [
+        "treasury#0",
+        "tmp%2#0",
+        "tmp%2#0 (copy)"
+      ]
+    },
+    "123": {
+      "op": "len",
+      "defined_out": [
+        "len%1#0",
+        "tmp%2#0",
+        "treasury#0"
+      ],
+      "stack_out": [
+        "treasury#0",
+        "tmp%2#0",
+        "len%1#0"
+      ]
+    },
+    "124": {
+      "op": "intc_1 // 8",
+      "defined_out": [
+        "8",
+        "len%1#0",
+        "tmp%2#0",
+        "treasury#0"
+      ],
+      "stack_out": [
+        "treasury#0",
+        "tmp%2#0",
+        "len%1#0",
+        "8"
+      ]
+    },
+    "125": {
+      "op": "==",
+      "defined_out": [
+        "eq%1#0",
+        "tmp%2#0",
+        "treasury#0"
+      ],
+      "stack_out": [
+        "treasury#0",
+        "tmp%2#0",
+        "eq%1#0"
+      ]
+    },
+    "126": {
+      "error": "invalid number of bytes for arc4.uint64",
+      "op": "assert // invalid number of bytes for arc4.uint64",
+      "stack_out": [
+        "treasury#0",
+        "tmp%2#0"
+      ]
+    },
+    "127": {
+      "op": "btoi",
+      "defined_out": [
+        "price#0",
+        "treasury#0"
+      ],
+      "stack_out": [
+        "treasury#0",
+        "price#0"
+      ]
+    },
+    "128": {
+      "op": "txn Sender",
+      "defined_out": [
+        "price#0",
+        "tmp%0#1",
+        "treasury#0"
+      ],
+      "stack_out": [
+        "treasury#0",
+        "price#0",
+        "tmp%0#1"
+      ]
+    },
+    "130": {
+      "op": "global CreatorAddress",
+      "defined_out": [
+        "price#0",
+        "tmp%0#1",
+        "tmp%1#1",
+        "treasury#0"
+      ],
+      "stack_out": [
+        "treasury#0",
+        "price#0",
+        "tmp%0#1",
+        "tmp%1#1"
+      ]
+    },
+    "132": {
+      "op": "==",
+      "defined_out": [
+        "price#0",
+        "tmp%2#1",
+        "treasury#0"
+      ],
+      "stack_out": [
+        "treasury#0",
+        "price#0",
+        "tmp%2#1"
+      ]
+    },
+    "133": {
+      "error": "Only the creator can configure",
+      "op": "assert // Only the creator can configure",
+      "stack_out": [
+        "treasury#0",
+        "price#0"
+      ]
+    },
+    "134": {
+      "op": "bytec_1 // \"treasury\"",
+      "defined_out": [
+        "\"treasury\"",
+        "price#0",
+        "treasury#0"
+      ],
+      "stack_out": [
+        "treasury#0",
+        "price#0",
+        "\"treasury\""
+      ]
+    },
+    "135": {
+      "op": "uncover 2",
+      "stack_out": [
+        "price#0",
+        "\"treasury\"",
+        "treasury#0"
+      ]
+    },
+    "137": {
+      "op": "app_global_put",
+      "stack_out": [
+        "price#0"
+      ]
+    },
+    "138": {
+      "op": "bytec_2 // \"price\"",
+      "defined_out": [
+        "\"price\"",
+        "price#0"
+      ],
+      "stack_out": [
+        "price#0",
+        "\"price\""
+      ]
+    },
+    "139": {
+      "op": "swap",
+      "stack_out": [
+        "\"price\"",
+        "price#0"
+      ]
+    },
+    "140": {
+      "op": "app_global_put",
+      "stack_out": []
+    },
+    "141": {
+      "op": "intc_0 // 1",
+      "defined_out": [
+        "1"
+      ],
+      "stack_out": [
+        "1"
+      ]
+    },
+    "142": {
+      "op": "return",
+      "stack_out": []
+    },
+    "143": {
+      "subroutine": "lootbox-commit-reveal/contract.algo.ts::LootBoxCommitReveal.commit[routing]",
+      "params": {},
+      "block": "commit",
+      "stack_in": [],
+      "op": "txn GroupIndex",
+      "defined_out": [
+        "tmp%0#0"
+      ],
+      "stack_out": [
+        "tmp%0#0"
+      ]
+    },
+    "145": {
+      "error": "Commit must follow its payment in the group",
+      "op": "assert // Commit must follow its payment in the group",
+      "stack_out": []
+    },
+    "146": {
+      "op": "txn GroupIndex",
+      "defined_out": [
+        "tmp%2#0"
+      ],
+      "stack_out": [
+        "tmp%2#0"
+      ]
+    },
+    "148": {
+      "op": "intc_0 // 1",
+      "defined_out": [
+        "1",
+        "tmp%2#0"
+      ],
+      "stack_out": [
+        "tmp%2#0",
+        "1"
+      ]
+    },
+    "149": {
+      "op": "-",
+      "defined_out": [
+        "payment#0"
+      ],
+      "stack_out": [
+        "payment#0"
+      ]
+    },
+    "150": {
+      "op": "dup",
+      "defined_out": [
+        "payment#0",
+        "payment#0 (copy)"
+      ],
+      "stack_out": [
+        "payment#0",
+        "payment#0 (copy)"
+      ]
+    },
+    "151": {
+      "op": "gtxns TypeEnum",
+      "defined_out": [
+        "gtxn_type%0#0",
+        "payment#0"
+      ],
+      "stack_out": [
+        "payment#0",
+        "gtxn_type%0#0"
+      ]
+    },
+    "153": {
+      "op": "intc_0 // pay",
+      "defined_out": [
+        "gtxn_type%0#0",
+        "pay",
+        "payment#0"
+      ],
+      "stack_out": [
+        "payment#0",
+        "gtxn_type%0#0",
+        "pay"
+      ]
+    },
+    "154": {
+      "op": "==",
+      "defined_out": [
+        "gtxn_type_matches%0#0",
+        "payment#0"
+      ],
+      "stack_out": [
+        "payment#0",
+        "gtxn_type_matches%0#0"
+      ]
+    },
+    "155": {
+      "error": "transaction type is pay",
+      "op": "assert // transaction type is pay",
+      "stack_out": [
+        "payment#0"
+      ]
+    },
+    "156": {
+      "op": "dup",
+      "stack_out": [
+        "payment#0",
+        "payment#0 (copy)"
+      ]
+    },
+    "157": {
+      "op": "gtxns Receiver",
+      "defined_out": [
+        "payment#0",
+        "tmp%3#0"
+      ],
+      "stack_out": [
+        "payment#0",
+        "tmp%3#0"
+      ]
+    },
+    "159": {
+      "op": "intc_3 // 0",
+      "defined_out": [
+        "0",
+        "payment#0",
+        "tmp%3#0"
+      ],
+      "stack_out": [
+        "payment#0",
+        "tmp%3#0",
+        "0"
+      ]
+    },
+    "160": {
+      "op": "bytec_1 // \"treasury\"",
+      "defined_out": [
+        "\"treasury\"",
+        "0",
+        "payment#0",
+        "tmp%3#0"
+      ],
+      "stack_out": [
+        "payment#0",
+        "tmp%3#0",
+        "0",
+        "\"treasury\""
+      ]
+    },
+    "161": {
+      "op": "app_global_get_ex",
+      "defined_out": [
+        "maybe_exists%0#0",
+        "maybe_value%0#0",
+        "payment#0",
+        "tmp%3#0"
+      ],
+      "stack_out": [
+        "payment#0",
+        "tmp%3#0",
+        "maybe_value%0#0",
+        "maybe_exists%0#0"
+      ]
+    },
+    "162": {
+      "error": "check GlobalState exists",
+      "op": "assert // check GlobalState exists",
+      "stack_out": [
+        "payment#0",
+        "tmp%3#0",
+        "maybe_value%0#0"
+      ]
+    },
+    "163": {
+      "op": "==",
+      "defined_out": [
+        "payment#0",
+        "tmp%4#0"
+      ],
+      "stack_out": [
+        "payment#0",
+        "tmp%4#0"
+      ]
+    },
+    "164": {
+      "error": "Payment must go to the treasury",
+      "op": "assert // Payment must go to the treasury",
+      "stack_out": [
+        "payment#0"
+      ]
+    },
+    "165": {
+      "op": "dup",
+      "stack_out": [
+        "payment#0",
+        "payment#0 (copy)"
+      ]
+    },
+    "166": {
+      "op": "gtxns Amount",
+      "defined_out": [
+        "payment#0",
+        "tmp%5#0"
+      ],
+      "stack_out": [
+        "payment#0",
+        "tmp%5#0"
+      ]
+    },
+    "168": {
+      "op": "intc_3 // 0",
+      "stack_out": [
+        "payment#0",
+        "tmp%5#0",
+        "0"
+      ]
+    },
+    "169": {
+      "op": "bytec_2 // \"price\"",
+      "defined_out": [
+        "\"price\"",
+        "0",
+        "payment#0",
+        "tmp%5#0"
+      ],
+      "stack_out": [
+        "payment#0",
+        "tmp%5#0",
+        "0",
+        "\"price\""
+      ]
+    },
+    "170": {
+      "op": "app_global_get_ex",
+      "defined_out": [
+        "maybe_exists%1#0",
+        "maybe_value%1#0",
+        "payment#0",
+        "tmp%5#0"
+      ],
+      "stack_out": [
+        "payment#0",
+        "tmp%5#0",
+        "maybe_value%1#0",
+        "maybe_exists%1#0"
+      ]
+    },
+    "171": {
+      "error": "check GlobalState exists",
+      "op": "assert // check GlobalState exists",
+      "stack_out": [
+        "payment#0",
+        "tmp%5#0",
+        "maybe_value%1#0"
+      ]
+    },
+    "172": {
+      "op": ">=",
+      "defined_out": [
+        "payment#0",
+        "tmp%6#0"
+      ],
+      "stack_out": [
+        "payment#0",
+        "tmp%6#0"
+      ]
+    },
+    "173": {
+      "error": "Payment is below the crate price",
+      "op": "assert // Payment is below the crate price",
+      "stack_out": [
+        "payment#0"
+      ]
+    },
+    "174": {
+      "op": "gtxns Sender",
+      "defined_out": [
+        "tmp%7#0"
+      ],
+      "stack_out": [
+        "tmp%7#0"
+      ]
+    },
+    "176": {
+      "op": "txn Sender",
+      "defined_out": [
+        "tmp%7#0",
+        "tmp%8#0"
+      ],
+      "stack_out": [
+        "tmp%7#0",
+        "tmp%8#0"
+      ]
+    },
+    "178": {
+      "op": "==",
+      "defined_out": [
+        "tmp%9#0"
+      ],
+      "stack_out": [
+        "tmp%9#0"
+      ]
+    },
+    "179": {
+      "error": "Payment sender must match the caller",
+      "op": "assert // Payment sender must match the caller",
+      "stack_out": []
+    },
+    "180": {
+      "op": "bytec_0 // \"c\"",
+      "defined_out": [
+        "\"c\""
+      ],
+      "stack_out": [
+        "\"c\""
+      ]
+    },
+    "181": {
+      "op": "txn Sender",
+      "defined_out": [
+        "\"c\"",
+        "materialized_values%0#0"
+      ],
+      "stack_out": [
+        "\"c\"",
+        "materialized_values%0#0"
+      ]
+    },
+    "183": {
+      "op": "concat",
+      "defined_out": [
+        "box_prefixed_key%0#0"
+      ],
+      "stack_out": [
+        "box_prefixed_key%0#0"
+      ]
+    },
+    "184": {
+      "op": "box_len",
+      "defined_out": [
+        "_%0#0",
+        "maybe_exists%2#0"
+      ],
+      "stack_out": [
+        "_%0#0",
+        "maybe_exists%2#0"
+      ]
+    },
+    "185": {
+      "op": "bury 1",
+      "stack_out": [
+        "maybe_exists%2#0"
+      ]
+    },
+    "187": {
+      "op": "!",
+      "defined_out": [
+        "tmp%10#0"
+      ],
+      "stack_out": [
+        "tmp%10#0"
+      ]
+    },
+    "188": {
+      "error": "Active commit exists \u2014 reveal or reclaim first",
+      "op": "assert // Active commit exists \u2014 reveal or reclaim first",
+      "stack_out": []
+    },
+    "189": {
+      "op": "global Round",
+      "defined_out": [
+        "tmp%11#0"
+      ],
+      "stack_out": [
+        "tmp%11#0"
+      ]
+    },
+    "191": {
+      "op": "bytec_0 // \"c\"",
+      "stack_out": [
+        "tmp%11#0",
+        "\"c\""
+      ]
+    },
+    "192": {
+      "op": "txn Sender",
+      "defined_out": [
+        "\"c\"",
+        "materialized_values%1#0",
+        "tmp%11#0"
+      ],
+      "stack_out": [
+        "tmp%11#0",
+        "\"c\"",
+        "materialized_values%1#0"
+      ]
+    },
+    "194": {
+      "op": "concat",
+      "defined_out": [
+        "box_prefixed_key%1#0",
+        "tmp%11#0"
+      ],
+      "stack_out": [
+        "tmp%11#0",
+        "box_prefixed_key%1#0"
+      ]
+    },
+    "195": {
+      "op": "swap",
+      "stack_out": [
+        "box_prefixed_key%1#0",
+        "tmp%11#0"
+      ]
+    },
+    "196": {
+      "op": "itob",
+      "defined_out": [
+        "box_prefixed_key%1#0",
+        "encoded_value%0#0"
+      ],
+      "stack_out": [
+        "box_prefixed_key%1#0",
+        "encoded_value%0#0"
+      ]
+    },
+    "197": {
+      "op": "box_put",
+      "stack_out": []
+    },
+    "198": {
+      "op": "intc_0 // 1",
+      "stack_out": [
+        "1"
+      ]
+    },
+    "199": {
+      "op": "return",
+      "stack_out": []
+    },
+    "200": {
+      "subroutine": "lootbox-commit-reveal/contract.algo.ts::LootBoxCommitReveal.reveal[routing]",
+      "params": {},
+      "block": "reveal",
+      "stack_in": [],
+      "op": "bytec_0 // \"c\"",
+      "defined_out": [
+        "\"c\""
+      ],
+      "stack_out": [
+        "\"c\""
+      ]
+    },
+    "201": {
+      "op": "txn Sender",
+      "defined_out": [
+        "\"c\"",
+        "materialized_values%0#0"
+      ],
+      "stack_out": [
+        "\"c\"",
+        "materialized_values%0#0"
+      ]
+    },
+    "203": {
+      "op": "concat",
+      "defined_out": [
+        "box_prefixed_key%0#0"
+      ],
+      "stack_out": [
+        "box_prefixed_key%0#0"
+      ]
+    },
+    "204": {
+      "op": "box_get",
+      "defined_out": [
+        "aggregate%box_get%0#0",
+        "aggregate%box_get%1#0"
+      ],
+      "stack_out": [
+        "aggregate%box_get%0#0",
+        "aggregate%box_get%1#0"
+      ]
+    },
+    "205": {
+      "error": "Box must have value",
+      "op": "assert // Box must have value",
+      "stack_out": [
+        "aggregate%box_get%0#0"
+      ]
+    },
+    "206": {
+      "op": "btoi",
+      "defined_out": [
+        "committed#0"
+      ],
+      "stack_out": [
+        "committed#0"
+      ]
+    },
+    "207": {
+      "op": "global Round",
+      "defined_out": [
+        "committed#0",
+        "tmp%0#1"
+      ],
+      "stack_out": [
+        "committed#0",
+        "tmp%0#1"
+      ]
+    },
+    "209": {
+      "op": "dig 1",
+      "defined_out": [
+        "committed#0",
+        "committed#0 (copy)",
+        "tmp%0#1"
+      ],
+      "stack_out": [
+        "committed#0",
+        "tmp%0#1",
+        "committed#0 (copy)"
+      ]
+    },
+    "211": {
+      "op": "intc_1 // 8",
+      "defined_out": [
+        "8",
+        "committed#0",
+        "committed#0 (copy)",
+        "tmp%0#1"
+      ],
+      "stack_out": [
+        "committed#0",
+        "tmp%0#1",
+        "committed#0 (copy)",
+        "8"
+      ]
+    },
+    "212": {
+      "op": "+",
+      "defined_out": [
+        "committed#0",
+        "tmp%0#1",
+        "tmp%1#1"
+      ],
+      "stack_out": [
+        "committed#0",
+        "tmp%0#1",
+        "tmp%1#1"
+      ]
+    },
+    "213": {
+      "op": ">",
+      "defined_out": [
+        "committed#0",
+        "tmp%2#1"
+      ],
+      "stack_out": [
+        "committed#0",
+        "tmp%2#1"
+      ]
+    },
+    "214": {
+      "error": "Must wait at least 8 rounds after commit",
+      "op": "assert // Must wait at least 8 rounds after commit",
+      "stack_out": [
+        "committed#0"
+      ]
+    },
+    "215": {
+      "op": "global Round",
+      "defined_out": [
+        "committed#0",
+        "tmp%3#0"
+      ],
+      "stack_out": [
+        "committed#0",
+        "tmp%3#0"
+      ]
+    },
+    "217": {
+      "op": "dig 1",
+      "stack_out": [
+        "committed#0",
+        "tmp%3#0",
+        "committed#0 (copy)"
+      ]
+    },
+    "219": {
+      "op": "pushint 900 // 900",
+      "defined_out": [
+        "900",
+        "committed#0",
+        "committed#0 (copy)",
+        "tmp%3#0"
+      ],
+      "stack_out": [
+        "committed#0",
+        "tmp%3#0",
+        "committed#0 (copy)",
+        "900"
+      ]
+    },
+    "222": {
+      "op": "+",
+      "defined_out": [
+        "committed#0",
+        "tmp%3#0",
+        "tmp%4#0"
+      ],
+      "stack_out": [
+        "committed#0",
+        "tmp%3#0",
+        "tmp%4#0"
+      ]
+    },
+    "223": {
+      "op": "<",
+      "defined_out": [
+        "committed#0",
+        "tmp%5#0"
+      ],
+      "stack_out": [
+        "committed#0",
+        "tmp%5#0"
+      ]
+    },
+    "224": {
+      "error": "Commit expired \u2014 call reclaim() and recommit",
+      "op": "assert // Commit expired \u2014 call reclaim() and recommit",
+      "stack_out": [
+        "committed#0"
+      ]
+    },
+    "225": {
+      "op": "intc_0 // 1",
+      "defined_out": [
+        "1",
+        "committed#0"
+      ],
+      "stack_out": [
+        "committed#0",
+        "1"
+      ]
+    },
+    "226": {
+      "op": "+",
+      "defined_out": [
+        "tmp%6#0"
+      ],
+      "stack_out": [
+        "tmp%6#0"
+      ]
+    },
+    "227": {
+      "op": "block BlkSeed",
+      "defined_out": [
+        "seed#0"
+      ],
+      "stack_out": [
+        "seed#0"
+      ]
+    },
+    "229": {
+      "op": "txn Sender",
+      "defined_out": [
+        "reinterpret_bytes[32]%0#0",
+        "seed#0"
+      ],
+      "stack_out": [
+        "seed#0",
+        "reinterpret_bytes[32]%0#0"
+      ]
+    },
+    "231": {
+      "op": "concat",
+      "defined_out": [
+        "tmp%8#0"
+      ],
+      "stack_out": [
+        "tmp%8#0"
+      ]
+    },
+    "232": {
+      "op": "sha256",
+      "defined_out": [
+        "mixed#0"
+      ],
+      "stack_out": [
+        "mixed#0"
+      ]
+    },
+    "233": {
+      "op": "bytec_0 // \"c\"",
+      "stack_out": [
+        "mixed#0",
+        "\"c\""
+      ]
+    },
+    "234": {
+      "op": "txn Sender",
+      "defined_out": [
+        "\"c\"",
+        "materialized_values%1#0",
+        "mixed#0"
+      ],
+      "stack_out": [
+        "mixed#0",
+        "\"c\"",
+        "materialized_values%1#0"
+      ]
+    },
+    "236": {
+      "op": "concat",
+      "defined_out": [
+        "box_prefixed_key%1#0",
+        "mixed#0"
+      ],
+      "stack_out": [
+        "mixed#0",
+        "box_prefixed_key%1#0"
+      ]
+    },
+    "237": {
+      "op": "box_del",
+      "defined_out": [
+        "mixed#0",
+        "{box_del}"
+      ],
+      "stack_out": [
+        "mixed#0",
+        "{box_del}"
+      ]
+    },
+    "238": {
+      "op": "pop",
+      "stack_out": [
+        "mixed#0"
+      ]
+    },
+    "239": {
+      "op": "extract 0 8",
+      "defined_out": [
+        "aggregate%val_as_bytes%0#0"
+      ],
+      "stack_out": [
+        "aggregate%val_as_bytes%0#0"
+      ]
+    },
+    "242": {
+      "op": "pushbytes 0x151f7c75",
+      "defined_out": [
+        "0x151f7c75",
+        "aggregate%val_as_bytes%0#0"
+      ],
+      "stack_out": [
+        "aggregate%val_as_bytes%0#0",
+        "0x151f7c75"
+      ]
+    },
+    "248": {
+      "op": "swap",
+      "stack_out": [
+        "0x151f7c75",
+        "aggregate%val_as_bytes%0#0"
+      ]
+    },
+    "249": {
+      "op": "concat",
+      "defined_out": [
+        "tmp%2#0"
+      ],
+      "stack_out": [
+        "tmp%2#0"
+      ]
+    },
+    "250": {
+      "op": "log",
+      "stack_out": []
+    },
+    "251": {
+      "op": "intc_0 // 1",
+      "stack_out": [
+        "1"
+      ]
+    },
+    "252": {
+      "op": "return",
+      "stack_out": []
+    },
+    "253": {
+      "subroutine": "lootbox-commit-reveal/contract.algo.ts::LootBoxCommitReveal.reclaim[routing]",
+      "params": {},
+      "block": "reclaim",
+      "stack_in": [],
+      "op": "bytec_0 // \"c\"",
+      "defined_out": [
+        "\"c\""
+      ],
+      "stack_out": [
+        "\"c\""
+      ]
+    },
+    "254": {
+      "op": "txn Sender",
+      "defined_out": [
+        "\"c\"",
+        "materialized_values%0#0"
+      ],
+      "stack_out": [
+        "\"c\"",
+        "materialized_values%0#0"
+      ]
+    },
+    "256": {
+      "op": "concat",
+      "defined_out": [
+        "box_prefixed_key%0#0"
+      ],
+      "stack_out": [
+        "box_prefixed_key%0#0"
+      ]
+    },
+    "257": {
+      "op": "box_get",
+      "defined_out": [
+        "aggregate%box_get%0#0",
+        "aggregate%box_get%1#0"
+      ],
+      "stack_out": [
+        "aggregate%box_get%0#0",
+        "aggregate%box_get%1#0"
+      ]
+    },
+    "258": {
+      "error": "Box must have value",
+      "op": "assert // Box must have value",
+      "stack_out": [
+        "aggregate%box_get%0#0"
+      ]
+    },
+    "259": {
+      "op": "btoi",
+      "defined_out": [
+        "committed#0"
+      ],
+      "stack_out": [
+        "committed#0"
+      ]
+    },
+    "260": {
+      "op": "global Round",
+      "defined_out": [
+        "committed#0",
+        "tmp%0#0"
+      ],
+      "stack_out": [
+        "committed#0",
+        "tmp%0#0"
+      ]
+    },
+    "262": {
+      "op": "swap",
+      "stack_out": [
+        "tmp%0#0",
+        "committed#0"
+      ]
+    },
+    "263": {
+      "op": "pushint 900 // 900",
+      "defined_out": [
+        "900",
+        "committed#0",
+        "tmp%0#0"
+      ],
+      "stack_out": [
+        "tmp%0#0",
+        "committed#0",
+        "900"
+      ]
+    },
+    "266": {
+      "op": "+",
+      "defined_out": [
+        "tmp%0#0",
+        "tmp%1#0"
+      ],
+      "stack_out": [
+        "tmp%0#0",
+        "tmp%1#0"
+      ]
+    },
+    "267": {
+      "op": ">=",
+      "defined_out": [
+        "tmp%2#0"
+      ],
+      "stack_out": [
+        "tmp%2#0"
+      ]
+    },
+    "268": {
+      "error": "Commit has not expired yet",
+      "op": "assert // Commit has not expired yet",
+      "stack_out": []
+    },
+    "269": {
+      "op": "bytec_0 // \"c\"",
+      "stack_out": [
+        "\"c\""
+      ]
+    },
+    "270": {
+      "op": "txn Sender",
+      "defined_out": [
+        "\"c\"",
+        "materialized_values%1#0"
+      ],
+      "stack_out": [
+        "\"c\"",
+        "materialized_values%1#0"
+      ]
+    },
+    "272": {
+      "op": "concat",
+      "defined_out": [
+        "box_prefixed_key%1#0"
+      ],
+      "stack_out": [
+        "box_prefixed_key%1#0"
+      ]
+    },
+    "273": {
+      "op": "box_del",
+      "defined_out": [
+        "{box_del}"
+      ],
+      "stack_out": [
+        "{box_del}"
+      ]
+    },
+    "274": {
+      "op": "pop",
+      "stack_out": []
+    },
+    "275": {
+      "op": "intc_0 // 1",
+      "defined_out": [
+        "1"
+      ],
+      "stack_out": [
+        "1"
+      ]
+    },
+    "276": {
+      "op": "return",
+      "stack_out": []
+    }
+  }
+}

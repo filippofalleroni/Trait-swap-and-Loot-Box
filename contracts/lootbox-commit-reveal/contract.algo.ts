@@ -1,100 +1,94 @@
 // Commit-reveal contract for loot box randomness on Algorand.
 //
-// Uses a commit-reveal pattern with Algorand's VRF beacon: the user
-// commits (recording the current round), waits at least 8 rounds, then
-// reveals to read the VRF seed from the block after their commit.
-// The VRF seed is already cryptographically random, so we extract a
-// uint64 directly — no additional PRNG layer is needed for a single
-// random value per reveal.
+// Uses a commit-reveal pattern with Algorand's on-chain VRF block seed: the
+// user commits (recording the current round) in an atomic group with a payment
+// to the treasury, waits at least MIN_WAIT_ROUNDS rounds, then reveals to read
+// the VRF seed from the block after their commit. The seed is hashed with the
+// caller's address so that two accounts committing in the same round receive
+// independent results, and a raw uint64 is returned via ABI return. The server
+// maps that value to a prize off-chain.
 //
-// If you need MULTIPLE random values from a single seed (e.g. rolling
-// several dice in one transaction), use lib-pcg-avm by Giorgio Ciotti:
-// https://github.com/CiottiGiorgio/lib-pcg-avm
-//
-// The commit() method enforces that the caller has paid the crate price
-// to the treasury by verifying the preceding transaction in the atomic
-// group. The treasury address and crate price are stored in global state
-// and set at deployment via createApplication(). Only the contract
-// creator can update them via configure().
-//
-// Algorand only retains block headers for ~1000 rounds. If a user
-// waits too long after committing, the VRF seed becomes inaccessible.
-// The reclaim() method lets users clean up expired commits so they
-// can recommit.
-//
-// Box MBR: Each commit creates a BoxMap entry (32-byte key + 8-byte
-// value = 40 bytes → 2500 + 400 * 40 = 18500 microALGO MBR).
-// The contract account must be funded with enough ALGO to cover MBR
-// for the maximum number of concurrent commits you expect. When a
-// commit is deleted (via reveal or reclaim), that MBR is freed.
+// Algorand only retains block headers for ~1000 rounds, so commits expire after
+// EXPIRY_ROUNDS and can be cleaned up with reclaim().
 
-import { Contract } from "@algorandfoundation/tealscript";
+import type { bytes, uint64 } from '@algorandfoundation/algorand-typescript'
+import {
+  abimethod,
+  Account,
+  assert,
+  BoxMap,
+  Contract,
+  Global,
+  GlobalState,
+  gtxn,
+  op,
+  Txn,
+  Uint64,
+} from '@algorandfoundation/algorand-typescript'
 
-const MIN_WAIT_ROUNDS = 8;
-const EXPIRY_ROUNDS = 900;
+// Minimum rounds to wait after commit before the block seed is available
+// (the reveal requires Global.round strictly greater than commitRound + this).
+const MIN_WAIT_ROUNDS: uint64 = 8
+// Conservative expiry within the ~1000-round block-header retention window.
+const EXPIRY_ROUNDS: uint64 = 900
 
-class LootBoxCommitReveal extends Contract {
-  commitRound = BoxMap<Address, uint64>();
-  treasuryAddress = GlobalStateKey<Address>();
-  cratePrice = GlobalStateKey<uint64>();
+export class LootBoxCommitReveal extends Contract {
+  commitRound = BoxMap<Account, uint64>({ keyPrefix: 'c' })
+  treasuryAddress = GlobalState<Account>({ key: 'treasury' })
+  cratePrice = GlobalState<uint64>({ key: 'price' })
 
-  createApplication(treasury: Address, price: uint64): void {
-    this.treasuryAddress.value = treasury;
-    this.cratePrice.value = price;
+  @abimethod({ onCreate: 'require' })
+  createApplication(treasury: Account, price: uint64): void {
+    this.treasuryAddress.value = treasury
+    this.cratePrice.value = price
   }
 
-  configure(treasury: Address, price: uint64): void {
-    assert(this.txn.sender === this.app.creator);
-    this.treasuryAddress.value = treasury;
-    this.cratePrice.value = price;
+  @abimethod()
+  configure(treasury: Account, price: uint64): void {
+    assert(Txn.sender === Global.creatorAddress, 'Only the creator can configure')
+    this.treasuryAddress.value = treasury
+    this.cratePrice.value = price
   }
 
+  @abimethod()
   commit(): void {
-    // The commit must be the second transaction in an atomic group.
-    // The first transaction must be a payment to the treasury for at
-    // least the crate price, from the same sender.
-    assert(this.txn.groupIndex > 0);
-    const payTxn = this.txnGroup[this.txn.groupIndex - 1];
-    assert(payTxn.typeEnum === TransactionType.Payment);
-    assert(payTxn.receiver === this.treasuryAddress.value);
-    assert(payTxn.amount >= this.cratePrice.value);
-    assert(payTxn.sender === this.txn.sender);
+    // The commit must be preceded in the atomic group by a payment to the
+    // treasury for at least the crate price, from the same sender.
+    assert(Txn.groupIndex > Uint64(0), 'Commit must follow its payment in the group')
+    const payment = gtxn.PaymentTxn(Txn.groupIndex - Uint64(1))
+    assert(payment.receiver === this.treasuryAddress.value, 'Payment must go to the treasury')
+    assert(payment.amount >= this.cratePrice.value, 'Payment is below the crate price')
+    assert(payment.sender === Txn.sender, 'Payment sender must match the caller')
 
-    // Reject if the sender already has an active commit. Without this,
-    // a second commit would silently overwrite the first, losing the
-    // original payment. The user must reveal() or reclaim() first.
-    assert(!this.commitRound(this.txn.sender).exists, "Active commit exists — reveal or reclaim first");
+    // One active commit per account: a second would overwrite the first and
+    // lose its payment. The user must reveal() or reclaim() first.
+    assert(!this.commitRound(Txn.sender).exists, 'Active commit exists — reveal or reclaim first')
 
-    this.commitRound(this.txn.sender).value = globals.round;
+    this.commitRound(Txn.sender).value = Global.round
   }
 
+  @abimethod()
   reveal(): uint64 {
-    const committed = this.commitRound(this.txn.sender).value;
+    const committed = this.commitRound(Txn.sender).value
 
-    assert(globals.round > committed + MIN_WAIT_ROUNDS, "Must wait at least 8 rounds after commit");
-    assert(globals.round < committed + EXPIRY_ROUNDS, "Commit expired — call reclaim() and recommit");
+    assert(Global.round > committed + MIN_WAIT_ROUNDS, 'Must wait at least 8 rounds after commit')
+    assert(Global.round < committed + EXPIRY_ROUNDS, 'Commit expired — call reclaim() and recommit')
 
-    // The VRF block seed is shared by everyone whose commit resolves to the
-    // same block, so mix in the caller's address before deriving the value.
-    // Without this, two users who commit in the same round would read the same
-    // seed and receive the same random number (and, under fixed odds, the same
-    // prize). Hashing seed || sender gives each caller an independent draw.
-    const seed = blocks[committed + 1].seed;
-    const randomValue = btoi(extract3(sha256(concat(seed, this.txn.sender)), 0, 8));
+    // VRF block seed of the block after the commit. It is shared by everyone
+    // whose commit resolves to the same block, so hash it with the caller's
+    // address to give each account an independent draw.
+    const seed = op.Block.blkSeed(committed + Uint64(1))
+    const mixed = op.sha256(seed.concat(Txn.sender.bytes))
+    const randomValue = op.extractUint64(mixed, Uint64(0))
 
-    this.commitRound(this.txn.sender).delete();
-    return randomValue;
+    this.commitRound(Txn.sender).delete()
+    return randomValue
   }
 
-  // Note: Since the prize table and selection logic are public, a user
-  // could simulate their reveal outcome before calling reveal(). If the
-  // result is unfavorable they can let the commit expire and reclaim
-  // instead. The crate price is still lost (paid atomically with commit),
-  // so each skip costs the full price — but it does let users avoid
-  // claiming unwanted prizes. This is an accepted design tradeoff.
+  @abimethod()
   reclaim(): void {
-    const committed = this.commitRound(this.txn.sender).value;
-    assert(globals.round >= committed + EXPIRY_ROUNDS, "Commit has not expired yet");
-    this.commitRound(this.txn.sender).delete();
+    const committed = this.commitRound(Txn.sender).value
+    assert(Global.round >= committed + EXPIRY_ROUNDS, 'Commit has not expired yet')
+    this.commitRound(Txn.sender).delete()
   }
 }

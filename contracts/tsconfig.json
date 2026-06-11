@@ -3,7 +3,7 @@
     "target": "ESNext",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "experimentalDecorators": true,
+    "experimentalDecorators": false,
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true
