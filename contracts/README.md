@@ -99,7 +99,8 @@ Then deploy to LocalNet and run the loot box flow end-to-end.
 | `configure(treasury, price)` | Creator-only. Updates the treasury address and/or crate price. |
 | `commit()` | Verifies the preceding payment in the atomic group (correct receiver, amount, sender). Rejects if the sender already has an active commit. Records the current round. |
 | `reveal()` | Reads the VRF seed from `blocks[committed+1]`, hashes it with the caller's address (`sha256(seed \|\| sender)`) for per-caller independence, returns a random `uint64`, deletes the commit box. Requires at least 9 rounds to have passed (strict `>`). Fails after 900 rounds. |
-| `reclaim()` | Deletes an expired commit (900+ rounds old) so the user can recommit. Frees the associated box MBR. |
+| `reclaim(target)` | Deletes an **expired** commit (900+ rounds old) for any account, freeing its box and returning the MBR to the app account. Permissionless — an expired commit can never be revealed, so anyone may sweep dead boxes. |
+| `withdraw(amount)` | Creator-only. Sends `amount` microALGO from the app account to the creator (recovers freed box MBR / excess funding). The AVM keeps the app at or above its minimum balance, so outstanding commit boxes can never be under-funded. |
 
 ## Build Exclusion
 

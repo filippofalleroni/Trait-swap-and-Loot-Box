@@ -159,8 +159,9 @@ The smart contract (in `contracts/lootbox-commit-reveal/`) implements:
 | `createApplication(treasury, price)` | Deploy-time setup. Sets the treasury address and crate price in global state. |
 | `configure(treasury, price)` | Creator-only. Updates treasury address and/or crate price after deployment. |
 | `commit()` | Verifies the preceding payment in the atomic group (correct receiver, amount, sender). Rejects if the sender already has an active commit. Records the current round. |
-| `reveal()` | Reads the VRF seed from block `commitRound + 1`, extracts a random `uint64`, deletes the commit box, and returns the value. Requires at least 9 rounds to have passed (strict `>`). Fails after 900 rounds. |
-| `reclaim()` | Cleans up expired commits (900+ rounds old) so users can recommit. Frees the associated box MBR. |
+| `reveal()` | Reads the VRF seed from block `commitRound + 1`, hashes it with the caller's address for per-caller independence, extracts a random `uint64`, deletes the commit box, and returns the value. Requires at least 9 rounds to have passed (strict `>`). Fails after 900 rounds. |
+| `reclaim(target)` | Permissionless cleanup of any **expired** commit (900+ rounds old). Frees the box and returns its MBR to the app account, so abandoned commits can't accumulate. |
+| `withdraw(amount)` | Creator-only recovery of freed box MBR / excess funding from the app account. The AVM keeps outstanding commit boxes funded. |
 
 The randomness is derived from the Algorand VRF block seed, which could not have been known at commit time, making results verifiable and tamper-resistant. The user calls `reveal()` on-chain themselves -- the server reads the ABI return value from the confirmed transaction's logs, ensuring the random number is generated entirely by the smart contract and verifiable by anyone.
 

@@ -9,9 +9,16 @@
 // maps that value to a prize off-chain.
 //
 // Algorand only retains block headers for ~1000 rounds, so commits expire after
-// EXPIRY_ROUNDS and can be cleaned up with reclaim().
+// EXPIRY_ROUNDS. Expired commits can be cleaned up by anyone via reclaim(),
+// which frees the box and returns its minimum-balance to the app account; the
+// creator can recover that balance with withdraw().
+//
+// The contract is intentionally immutable (no update/delete handlers) so the
+// rules can never change after deployment. It never custodies prize funds —
+// payments go to the treasury and prizes are sent from a separate wallet — so
+// the only ALGO it holds is box minimum-balance funding.
 
-import type { bytes, uint64 } from '@algorandfoundation/algorand-typescript'
+import type { uint64 } from '@algorandfoundation/algorand-typescript'
 import {
   abimethod,
   Account,
@@ -21,6 +28,7 @@ import {
   Global,
   GlobalState,
   gtxn,
+  itxn,
   op,
   Txn,
   Uint64,
@@ -69,6 +77,7 @@ export class LootBoxCommitReveal extends Contract {
 
   @abimethod()
   reveal(): uint64 {
+    assert(this.commitRound(Txn.sender).exists, 'No active commit to reveal')
     const committed = this.commitRound(Txn.sender).value
 
     assert(Global.round > committed + MIN_WAIT_ROUNDS, 'Must wait at least 8 rounds after commit')
@@ -85,10 +94,31 @@ export class LootBoxCommitReveal extends Contract {
     return randomValue
   }
 
+  // Reclaim an EXPIRED commit. Permissionless on purpose: an expired commit can
+  // never be revealed (the block seed is gone), so anyone may clean it up. This
+  // frees the box and returns its minimum-balance to the app account, so the
+  // contract cannot accumulate dead boxes from abandoned commits.
   @abimethod()
-  reclaim(): void {
-    const committed = this.commitRound(Txn.sender).value
+  reclaim(target: Account): void {
+    assert(this.commitRound(target).exists, 'No commit to reclaim')
+    const committed = this.commitRound(target).value
     assert(Global.round >= committed + EXPIRY_ROUNDS, 'Commit has not expired yet')
-    this.commitRound(Txn.sender).delete()
+    this.commitRound(target).delete()
+  }
+
+  // Recover freed box minimum-balance / excess funding from the app account.
+  // Creator-only. The AVM enforces that the app account stays at or above its
+  // minimum balance after the inner payment, so this can never under-fund the
+  // boxes of outstanding commits.
+  @abimethod()
+  withdraw(amount: uint64): void {
+    assert(Txn.sender === Global.creatorAddress, 'Only the creator can withdraw')
+    itxn
+      .payment({
+        receiver: Global.creatorAddress,
+        amount: amount,
+        fee: 0,
+      })
+      .submit()
   }
 }
