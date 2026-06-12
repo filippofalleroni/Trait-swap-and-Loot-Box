@@ -4,7 +4,7 @@ This directory contains the Algorand TypeScript (Puya) source for the commit-rev
 
 ## Overview
 
-The contract implements a commit-reveal pattern backed by the **Algorand Randomness Beacon** (an ARC-21 VRF oracle — app `600011887` on TestNet, `947461882` on MainNet). It enforces payment, derives verifiable randomness from the Beacon, and returns the result on-chain — the server never generates the randomness itself. Using the Beacon (rather than the raw block seed) means the outcome cannot be biased by block proposers, which is the recommended approach for value-bearing randomness.
+The contract implements a commit-reveal pattern backed by the **Algorand Randomness Beacon** (an ARC-21 VRF oracle — app `600011887` on TestNet, `1615566206` on MainNet). It enforces payment, derives verifiable randomness from the Beacon, and returns the result on-chain — the server never generates the randomness itself. Using the Beacon (rather than the raw block seed) means the outcome cannot be biased by block proposers, which is the recommended approach for value-bearing randomness.
 
 ### Flow
 
@@ -64,7 +64,7 @@ Pre-compiled artifacts are included in the `artifacts/` directory (ARC-32 / ARC-
 2. Deploy using AlgoKit or `goal`. The `createApplication` call takes four arguments:
    - `treasury` — the Algorand address that receives crate payments
    - `price` — the crate price in microALGO (e.g. `10000000` for 10 ALGO)
-   - `beaconApp` — the Randomness Beacon app id for your network (`600011887` TestNet, `947461882` MainNet)
+   - `beaconApp` — the Randomness Beacon app id for your network (`600011887` TestNet, `1615566206` MainNet). **Verify the app exists on your target network before deploying** — a wrong beacon id makes every reveal fail after buyers have paid.
    - `beaconCadence` — the Beacon's publishing cadence in rounds (the official Beacon publishes every `8` rounds)
 
 3. **Fund the contract account** with enough ALGO to cover box MBR for concurrent commits (≈ 18,500 microALGO each), plus the account minimum balance (100,000 microALGO).

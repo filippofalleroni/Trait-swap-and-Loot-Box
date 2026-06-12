@@ -1,13 +1,20 @@
 # Algorand TraitSwap & LootBox
 
-An open-source template for adding **trait swapping** (ARC-19 metadata updates) and **loot box** (commit-reveal randomness) functionality to any Algorand NFT collection. White-label ready -- configure it for your project and deploy.
+An open-source template for adding **trait swapping** (ARC-19 metadata updates) and a **loot box** with verifiable on-chain randomness to any Algorand NFT collection. White-label ready -- configure it for your project and deploy.
+
+The loot box ships with **two randomness backends** — pick the trade-off that fits your prizes:
+
+| Mode | Trust model | Signatures | Speed | Setup |
+|---|---|---|---|---|
+| **`block-seed`** (default) | Verifiable from public chain data; biasing requires proposing consecutive blocks | 1 | ~10 s | None — just env vars |
+| **`beacon`** | Fully trustless VRF (no party, including block proposers, can bias the draw) with an on-chain audit trail | 2 + short wait | ~45 s | Deploy the included smart contract |
 
 ---
 
 ## Features
 
 - **Trait Lab** -- Browse, preview, and apply new traits to your NFTs. Traits are composited as layered PNG images and the resulting metadata is uploaded to IPFS. The on-chain ARC-19 reserve address is updated so wallets and explorers display the new image instantly.
-- **Loot Box** -- Commit-reveal loot box backed by Algorand's VRF randomness beacon. Supports tiered prizes including fungible tokens and unique NFTs, with weighted probability and rarity tiers.
+- **Loot Box** -- Verifiable on-chain randomness with two selectable backends: fast single-signature **block-seed** draws (no contract to deploy) or the fully trustless **Randomness Beacon** commit-reveal contract. Supports tiered prizes including fungible tokens, ALGO, and unique NFTs, with weighted probability and rarity tiers. Winners opt in to only the asset they actually win.
 - **Admin Panel** -- Manage prize configurations, view treasury and master wallet balances, opt the master wallet in to new assets, and inspect prize pool inventory. Access is gated by wallet signature authentication.
 - **Wallet Integration** -- Pera, Defly, and Lute wallet support via `@txnlab/use-wallet`.
 - **Preview Mode** -- Develop and test safely. Both trait swapping and loot box run in preview mode by default, simulating the full flow without on-chain changes.
@@ -91,10 +98,12 @@ Copy `.env.example` to `.env.local` and configure:
 | Variable | Description | Default |
 |---|---|---|
 | `LOOTBOX_MASTER_MNEMONIC` | 25-word mnemonic for the prize distribution wallet. Holds all prize tokens/NFTs and sends them to winners. **Use a separate wallet from the manager.** | *(required for loot box)* |
-| `LOOTBOX_CONTRACT_APP_ID` | Application ID of the deployed commit-reveal smart contract. Set to `0` or leave empty for preview mode. | `0` |
+| `LOOTBOX_RANDOMNESS_MODE` | Randomness backend: `block-seed` (one signature, no contract) or `beacon` (the on-chain commit-reveal contract — requires `LOOTBOX_CONTRACT_APP_ID`). | `block-seed` |
+| `LOOTBOX_BLOCK_SEED_COUNT` | Block-seed mode only: how many consecutive block seeds are hashed into each draw. Biasing a result requires proposing this many consecutive blocks — raise it for higher-value prizes, or set `1` for maximum speed. | `2` |
+| `LOOTBOX_CONTRACT_APP_ID` | Beacon mode only: application ID of your deployed commit-reveal smart contract. Not used in block-seed mode. | `0` |
 | `LOOTBOX_LIVE_ENABLED` | Set to `"true"` to enable real prize distribution. When `"false"`, prizes are resolved but not distributed on-chain. | `false` |
-| `LOOTBOX_PRICE_ALGO` | Price in ALGO to open one loot box. Overrides the value in `config/lootbox.ts`. | `10` |
-| `LOOTBOX_PAUSED` | Set to `"true"` to temporarily pause loot box commits and reveals (returns 503). | `false` |
+| `LOOTBOX_PRICE_ALGO` | Price in ALGO to open one loot box. Keep this in sync with `cratePrice` / `cratePriceMicroAlgo` in `config/lootbox.ts` (the UI displays the config values; the server enforces this one). | `10` |
+| `LOOTBOX_PAUSED` | Set to `"true"` to temporarily pause loot box opens (returns 503). | `false` |
 
 ### Admin & Access Control
 
@@ -143,14 +152,30 @@ Trait removal follows the same flow but clears the trait from the metadata prope
 
 ## How the Loot Box Works
 
-1. **User clicks "Open Loot Box"** and opts in to any prize ASAs they have not yet opted in to.
-2. **Commit phase** -- The server builds an atomic transaction group containing a payment (user pays crate price to treasury) and an application call to the smart contract's `commit(payment)` method, which references that payment as its transaction argument. The contract verifies the payment (correct receiver, amount, sender) before recording the commit. The user signs both transactions.
-3. **Wait** -- The client waits for the Randomness Beacon to publish the target round (~2× the Beacon cadence, a short wait). A progress indicator shows remaining rounds.
-4. **On-chain reveal** -- The client requests an unsigned `reveal()` app call from the server, signs it, and submits it. The contract deterministically derives a future Beacon round from the commit, fetches that round's VRF value from the Randomness Beacon (bound to the caller's address), extracts a random `uint64`, deletes the commit box, and returns the value via ABI return.
-5. **Server verification** -- The server verifies the on-chain reveal transaction via the indexer, reads the ABI return value from the transaction logs, and uses it for weighted prize selection.
-6. **Distribution** -- In live mode, the master wallet sends the prize (token or NFT transfer) to the user. The result is displayed with a rarity-colored animation.
+Both modes share the same skeleton: the user pays the crate price to the treasury, a verifiably random value is drawn from the chain, the server maps it onto the weighted prize pool, and the master wallet delivers the prize. They differ in where the randomness comes from.
 
-### Commit-Reveal Randomness
+If the winner isn't opted in to the won asset, the server responds with `needs-optin` and the client signs a single free opt-in for **just that asset** before delivery — wallets are never pre-filled with every prize asset. The draw is a pure function of on-chain data, so the post-opt-in retry recomputes the same prize without any server-side state.
+
+### Block-seed mode (default — 1 signature, ~10 seconds)
+
+1. **User clicks "Open Loot Box"** and signs a single payment (crate price to treasury). That's the only signature.
+2. **Wait for fresh blocks** -- The server waits for the next `LOOTBOX_BLOCK_SEED_COUNT` blocks after the payment's confirmed round.
+3. **Draw** -- The random value is `sha256(seed(C+1) ‖ … ‖ seed(C+N) ‖ paymentTxId)`, where `C` is the payment's confirmed round and each `seed` is that block's 32-byte VRF seed. The seeds don't exist yet when the user signs (unpredictable), the payment txid binds the draw to this specific open (two buyers in the same round get independent results), and anyone can recompute the value from public chain data to verify their prize.
+4. **Distribution** -- The master wallet sends the prize (ALGO, token, or NFT transfer) to the user.
+
+**Trust model:** the only party who could influence a draw is a block proposer controlling all `N` consecutive blocks after the payment — and even then only by discarding otherwise-valid blocks. With the default `N = 2` this is infeasible without an enormous stake share. For most prize pools this is plenty; for very high-value prizes, raise `LOOTBOX_BLOCK_SEED_COUNT` or use beacon mode.
+
+### Beacon mode (fully trustless — 2 signatures, ~45 seconds)
+
+1. **Commit** -- The server builds an atomic group: a payment to the treasury plus an application call to the contract's `commit(payment)` method. The contract verifies the payment and locks a *future* Randomness Beacon round in box storage. One signature covers the group.
+2. **Wait** -- The client waits for the Beacon to publish the target round (a progress indicator shows remaining rounds).
+3. **On-chain reveal** -- The user signs a `reveal()` app call. The contract fetches the target round's VRF value from the Randomness Beacon (bound to the caller's address), deletes the commit box, and returns a random `uint64` via ABI return — also emitted as an ARC-28 `Revealed` event, so every draw has a permanent on-chain audit trail.
+4. **Server verification** -- The server verifies the reveal transaction via the indexer, reads the ABI return value from the logs, and uses it for weighted prize selection.
+5. **Distribution** -- The master wallet sends the prize to the user.
+
+**Trust model:** the Beacon's VRF value for a round locked at commit time cannot be influenced by anyone — not the operator, not block proposers. This is the maximum-trust option, at the cost of a second signature, a short wait, and deploying the contract.
+
+### The Commit-Reveal Contract (beacon mode)
 
 The smart contract (in `contracts/lootbox-commit-reveal/`) implements:
 
@@ -169,9 +194,11 @@ The contract account must be funded with enough ALGO to cover box MBR for the ma
 
 ---
 
-## Smart Contract Deployment
+## Smart Contract Deployment (beacon mode only)
 
-Deploy your own instance of the commit-reveal contract before enabling live loot box mode. Full instructions are in [`contracts/README.md`](contracts/README.md).
+Block-seed mode needs **no contract** — skip this section entirely unless you set `LOOTBOX_RANDOMNESS_MODE=beacon`.
+
+For beacon mode, deploy your own instance of the commit-reveal contract before enabling live loot box mode. Full instructions are in [`contracts/README.md`](contracts/README.md).
 
 Summary:
 
@@ -186,12 +213,13 @@ npm run build   # algokit compile ts lootbox-commit-reveal --output-source-map -
 
 # Deploy using AlgoKit or goal
 # createApplication requires: treasury, crate price (microALGO),
-# Randomness Beacon app id (600011887 TestNet / 947461882 MainNet), Beacon cadence (8)
+# Randomness Beacon app id (600011887 TestNet / 1615566206 MainNet), Beacon cadence (8)
 algokit deploy
 
 # Fund the contract account for box MBR (see contracts/README.md)
 
-# Set the app ID in .env.local
+# Set the mode + app ID in .env.local
+LOOTBOX_RANDOMNESS_MODE=beacon
 LOOTBOX_CONTRACT_APP_ID=<your-app-id>
 LOOTBOX_LIVE_ENABLED=true
 ```
@@ -211,7 +239,7 @@ The template runs in **preview mode** by default for both features:
 | Feature | Preview Behavior | Live Behavior | Env Var to Enable |
 |---|---|---|---|
 | Trait Swap | Payment is verified but no IPFS upload or on-chain update occurs. Returns a preview response. | Full flow: IPFS upload, ARC-19 reserve address update on-chain. | `ARC19_LIVE_UPDATES_ENABLED=true` |
-| Loot Box | Payment is sent to treasury (real ALGO is spent). Prize is resolved locally using server-side randomness (no smart contract interaction). Not distributed on-chain. | Atomic payment + app call group. VRF-derived randomness. Prize distributed from master wallet. | `LOOTBOX_LIVE_ENABLED=true` |
+| Loot Box | Payment is sent to treasury (real ALGO is spent). Prize is resolved locally using server-side randomness. Not distributed on-chain. | Verifiable on-chain randomness (block seeds or Beacon VRF, per `LOOTBOX_RANDOMNESS_MODE`). Prize distributed from master wallet. | `LOOTBOX_LIVE_ENABLED=true` |
 
 This lets you develop the UI, test wallet integration, and verify payment flows without risking real assets.
 
@@ -221,17 +249,20 @@ This lets you develop the UI, test wallet integration, and verify payment flows 
 
 ### Payment & Transaction Safety
 
-Every payment is verified on-chain via the indexer before proceeding. The server checks sender, receiver, amount, transaction type, note prefix, and age. Transactions with `rekey-to` or `close-remainder-to` fields are rejected. Overpayments (>2x expected) are flagged. The loot box smart contract independently verifies the payment in the atomic group, so no one can commit without paying.
+Every payment is verified on-chain via the indexer before proceeding. The server checks sender, receiver, amount, transaction type, note prefix, and age. Transactions with `rekey-to` or `close-remainder-to` fields are rejected. Overpayments (>2x expected) are flagged. In beacon mode, the smart contract additionally verifies the payment inside the atomic group, so no one can commit without paying.
 
 Trait swap and loot box payments use different note prefixes (`traitswap:` and `lootbox:`) so one cannot be replayed as the other. Loot box distribution is **idempotent**: each payout is keyed to its payment transaction ID and recorded in the on-chain distribution note, so resubmitting a completed open returns the original result instead of paying out a second time.
 
 ### Randomness
 
-In live mode, randomness comes from the Algorand Randomness Beacon (a VRF oracle), fetched on-chain by the smart contract. The server reads the result from the confirmed reveal transaction's ABI return value -- it never generates the randomness itself. There is no server-side randomness fallback in live mode.
+In live mode the server never generates randomness itself — there is no server-side fallback.
+
+- **Block-seed mode:** the draw is `sha256` over the VRF seeds of blocks produced *after* the payment confirms, mixed with the payment txid. The seeds are unknowable when the user signs, the txid makes every draw independent, and the inputs are public — anyone can recompute and verify any result. Influencing a draw requires proposing all `LOOTBOX_BLOCK_SEED_COUNT` consecutive blocks after the payment.
+- **Beacon mode:** randomness comes from the Algorand Randomness Beacon (a VRF oracle) for a round locked at commit time, fetched on-chain by the smart contract and read from the confirmed reveal transaction's ABI return value. No party can bias it, and every draw is logged as an ARC-28 event.
 
 ### Reliability
 
-If the browser closes mid-flow, pending state is saved to `localStorage`. On return the UI resumes from where the user left off -- VRF wait, reveal signing, or server distribution. Prize distribution retries up to 3 times with delays between attempts, resending the *same* signed transaction so a confirmation timeout can never pay out twice. Before sending — and before processing any retry — the server checks the indexer for an existing payout tied to that payment, so a lost response or a server restart results in recovery, never a double distribution. If a trait swap fails after payment (e.g. IPFS timeout), the transaction ID is released so the user can retry with the same payment.
+If the browser closes mid-flow, pending state is saved to `localStorage`. On return the UI resumes from where the user left off. Prize distribution retries up to 3 times with delays between attempts, resending the *same* signed transaction so a confirmation timeout can never pay out twice. Before sending — and before processing any retry — the server checks the indexer for an existing payout tied to that payment, and every distribution carries a **lease** derived from the payment txid: the chain itself confirms at most one transaction per (sender, lease) within a validity window, so even two concurrent server instances cannot double-pay. If a won one-of-one NFT becomes undeliverable in the moment between the draw and the transfer (a concurrent winner took the last copy), the same random value is re-mapped over the always-in-stock token tiers so a paid buyer is never left with nothing. If a trait swap fails after payment (e.g. IPFS timeout), the transaction ID is released so the user can retry with the same payment.
 
 ### Server-Side Security
 
@@ -239,7 +270,7 @@ All wallet mnemonics (`MANAGER_MNEMONIC`, `LOOTBOX_MASTER_MNEMONIC`) are used on
 
 ### Admin Panel
 
-Admin access requires signing a challenge nonce with the wallet's Ed25519 key. The signed transaction is validated for type, zero amount, self-payment, and absence of rekey/close fields. Sessions expire after 1 hour.
+Admin access requires signing a challenge nonce with the wallet's Ed25519 key. The signature is cryptographically verified against the sender's public key over the exact signed bytes, and the transaction is validated for type, zero amount, self-payment, and absence of rekey/close fields. Sessions expire after 1 hour.
 
 ### Production Recommendations
 
@@ -288,9 +319,9 @@ app/
   api/
     trait-lab/payment-tx/route.ts   Build unsigned payment for trait swap
     trait-lab/mint/route.ts         Verify payment, update ARC-19 metadata
-    lootbox/commit/route.ts         Build unsigned commit transactions
-    lootbox/build-reveal/route.ts   Build unsigned reveal app call
-    lootbox/reveal/route.ts         Verify on-chain reveal, resolve & distribute prize
+    lootbox/commit/route.ts         Build the unsigned open transactions (per randomness mode)
+    lootbox/build-reveal/route.ts   Build unsigned reveal app call (beacon mode only)
+    lootbox/reveal/route.ts         Draw randomness, resolve & distribute the prize
     lootbox/prizes/route.ts         Return prize list with probabilities
     lootbox/buyer-balance/route.ts  Prize pool wallet ALGO balance
     owned-nfts/route.ts             Query wallet's collection NFTs
@@ -313,9 +344,9 @@ config/                             All customizable configuration (see above)
 
 contracts/
   lootbox-commit-reveal/
-    contract.algo.ts                TEALScript commit-reveal smart contract
+    contract.algo.ts                Algorand TypeScript (Puya) commit-reveal contract (beacon mode)
     artifacts/                      Pre-compiled TEAL, ARC-32/ARC-56 app specs, source map
-  tsconfig.json                     TEALScript compiler config (excluded from Next.js build)
+  tsconfig.json                     Puya compiler config (excluded from Next.js build)
 
 contexts/
   wallet-context.tsx                Wallet provider (Pera/Defly/Lute)
