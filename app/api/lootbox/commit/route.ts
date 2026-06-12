@@ -6,6 +6,11 @@ import { getTreasuryAddress } from "@/lib/treasury";
 
 const LOOTBOX_LIVE = process.env.LOOTBOX_LIVE_ENABLED === "true";
 const CONTRACT_APP_ID = Number(process.env.LOOTBOX_CONTRACT_APP_ID ?? "0");
+// Randomness backend: "block-seed" (default — fast, 1 signature, no contract) or
+// "beacon" (the on-chain commit-reveal contract using the Algorand Randomness
+// Beacon — fully trustless, 2 signatures + a short wait).
+const USE_BEACON =
+  (process.env.LOOTBOX_RANDOMNESS_MODE ?? "block-seed").trim().toLowerCase() === "beacon";
 const CRATE_PRICE_MICRO = Math.round(
   Number(process.env.LOOTBOX_PRICE_ALGO ?? "10") * 1_000_000
 );
@@ -97,32 +102,7 @@ export async function POST(request: Request) {
     const suggestedParams = await algodClient.getTransactionParams().do();
     const treasuryAddr = getTreasuryAddress();
 
-    if (!LOOTBOX_LIVE) {
-      const paymentTxn =
-        algosdk.makePaymentTxnWithSuggestedParamsFromObject({
-          sender: walletAddress,
-          receiver: treasuryAddr,
-          amount: CRATE_PRICE_MICRO,
-          suggestedParams,
-          note: new TextEncoder().encode("lootbox:open"),
-        });
-
-      const b64 = Buffer.from(paymentTxn.toByte()).toString("base64");
-
-      return NextResponse.json({
-        txIds: [paymentTxn.txID()],
-        unsignedTxns: [b64],
-        mode: "preview",
-      });
-    }
-
-    if (!CONTRACT_APP_ID) {
-      return NextResponse.json(
-        { error: "Loot box contract is not configured." },
-        { status: 500 }
-      );
-    }
-
+    // The treasury payment is the same in every mode — it's the price of one open.
     const paymentTxn = algosdk.makePaymentTxnWithSuggestedParamsFromObject({
       sender: walletAddress,
       receiver: treasuryAddr,
@@ -131,16 +111,34 @@ export async function POST(request: Request) {
       note: new TextEncoder().encode("lootbox:open"),
     });
 
-    const commitSelector = new Uint8Array(
-      Buffer.from(
-        crypto.createHash("sha512-256").update("commit()void").digest()
-      ).subarray(0, 4)
-    );
+    // Preview: still build a real payment so the flow is identical, but the
+    // reveal returns a sample prize without distributing anything.
+    if (!LOOTBOX_LIVE) {
+      return NextResponse.json({
+        txIds: [paymentTxn.txID()],
+        unsignedTxns: [Buffer.from(paymentTxn.toByte()).toString("base64")],
+        paymentTxId: paymentTxn.txID(),
+        mode: "preview",
+      });
+    }
 
-    const senderPk = algosdk.decodeAddress(walletAddress).publicKey;
+    // Beacon mode: pay + on-chain commit() in one atomic group. The contract
+    // locks a future Randomness Beacon round; the user signs a reveal() later.
+    if (USE_BEACON) {
+      if (!CONTRACT_APP_ID) {
+        return NextResponse.json(
+          { error: "Loot box contract is not configured." },
+          { status: 500 }
+        );
+      }
 
-    const appCallTxn =
-      algosdk.makeApplicationCallTxnFromObject({
+      const commitSelector = new Uint8Array(
+        Buffer.from(
+          crypto.createHash("sha512-256").update("commit()void").digest()
+        ).subarray(0, 4)
+      );
+      const senderPk = algosdk.decodeAddress(walletAddress).publicKey;
+      const appCallTxn = algosdk.makeApplicationCallTxnFromObject({
         sender: walletAddress,
         appIndex: CONTRACT_APP_ID,
         onComplete: algosdk.OnApplicationComplete.NoOpOC,
@@ -149,19 +147,29 @@ export async function POST(request: Request) {
         suggestedParams,
       });
 
-    const txns = [paymentTxn, appCallTxn];
-    algosdk.assignGroupID(txns);
+      const txns = [paymentTxn, appCallTxn];
+      algosdk.assignGroupID(txns);
 
-    const unsignedTxns = txns.map((txn) =>
-      Buffer.from(txn.toByte()).toString("base64")
-    );
-    const txIds = txns.map((txn) => txn.txID());
+      return NextResponse.json({
+        txIds: txns.map((txn) => txn.txID()),
+        unsignedTxns: txns.map((txn) => Buffer.from(txn.toByte()).toString("base64")),
+        paymentTxId: paymentTxn.txID(),
+        mode: "live",
+        randomnessMode: "beacon",
+        contractAppId: CONTRACT_APP_ID,
+      });
+    }
 
+    // Block-seed mode: a single payment, no contract. Randomness is derived from
+    // the VRF seeds of the blocks AFTER this payment confirms (see the reveal
+    // route) — unknowable when the user signs and bound to their payment txid,
+    // so the open stays a single signature.
     return NextResponse.json({
-      txIds,
-      unsignedTxns,
+      txIds: [paymentTxn.txID()],
+      unsignedTxns: [Buffer.from(paymentTxn.toByte()).toString("base64")],
+      paymentTxId: paymentTxn.txID(),
       mode: "live",
-      contractAppId: CONTRACT_APP_ID,
+      randomnessMode: "block-seed",
     });
   } catch (err: unknown) {
     console.error("[lootbox/commit]", err);

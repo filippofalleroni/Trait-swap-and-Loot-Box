@@ -4,6 +4,10 @@ import algosdk from "algosdk";
 import { getAlgodClient } from "@/lib/algorand";
 
 const CONTRACT_APP_ID = Number(process.env.LOOTBOX_CONTRACT_APP_ID ?? "0");
+// This route only exists for beacon mode — block-seed opens have no on-chain
+// reveal transaction to build.
+const USE_BEACON =
+  (process.env.LOOTBOX_RANDOMNESS_MODE ?? "block-seed").trim().toLowerCase() === "beacon";
 
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const ipRateLimitMap = new Map<string, { count: number; resetAt: number }>();
@@ -52,6 +56,13 @@ function getClientIp(request: Request): string {
 
 export async function POST(request: Request) {
   try {
+    if (!USE_BEACON) {
+      return NextResponse.json(
+        { error: "On-chain reveal is only used in beacon mode." },
+        { status: 400 }
+      );
+    }
+
     const clientIp = getClientIp(request);
     if (isIpRateLimited(clientIp)) {
       return NextResponse.json(

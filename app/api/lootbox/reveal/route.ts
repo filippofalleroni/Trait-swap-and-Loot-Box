@@ -1,7 +1,7 @@
-import { randomBytes } from "crypto";
+import { randomBytes, createHash } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import algosdk from "algosdk";
-import { INDEXER_BASE_URL } from "@/lib/algorand";
+import { ALGOD_BASE_URL, INDEXER_BASE_URL } from "@/lib/algorand";
 import { getTreasuryAddress } from "@/lib/treasury";
 import { resolvePrize } from "@/lib/lootbox-prize-resolver";
 import { distributePrize, findExistingDistribution } from "@/lib/lootbox-distributor";
@@ -19,6 +19,18 @@ export const maxDuration = 60;
 
 const LOOTBOX_LIVE = process.env.LOOTBOX_LIVE_ENABLED === "true";
 const CONTRACT_APP_ID = Number(process.env.LOOTBOX_CONTRACT_APP_ID ?? "0");
+// Randomness backend — must match the commit route. "block-seed" (default) draws
+// randomness from the VRF seeds of blocks produced AFTER the payment confirms;
+// "beacon" reads the on-chain commit-reveal contract's Randomness Beacon value.
+const USE_BEACON =
+  (process.env.LOOTBOX_RANDOMNESS_MODE ?? "block-seed").trim().toLowerCase() === "beacon";
+// Block-seed mode: how many consecutive block seeds to hash. Biasing the result
+// requires proposing this many consecutive blocks. 2 is a strong default; raise
+// it for higher-value prizes, or drop to 1 for maximum speed.
+const BLOCK_SEED_COUNT = Math.max(
+  1,
+  Number(process.env.LOOTBOX_BLOCK_SEED_COUNT ?? "2") || 2
+);
 const CRATE_PRICE_MICRO = Math.round(
   Number(process.env.LOOTBOX_PRICE_ALGO ?? "10") * 1_000_000
 );
@@ -117,6 +129,7 @@ const SAFE_ERROR_MAP: Record<string, string> = {
   "Transaction round time is in the future.": "Payment timestamp is invalid. Please try again.",
   "Reveal transaction round time is in the future.": "Reveal timestamp is invalid. Please try again.",
   "Master wallet has insufficient balance for this prize.": "This prize is temporarily out of stock. Please contact support.",
+  "Randomness is still finalizing. Please try again.": "Randomness is still finalizing. Please wait a moment and try again.",
 };
 
 function safeErrorMessage(error: unknown): string {
@@ -201,7 +214,7 @@ export async function POST(request: NextRequest) {
     // lost). Return success instead of re-distributing. This both recovers a
     // stuck retry and prevents any double payout — even across cold starts,
     // because the proof of delivery lives on-chain, not in memory.
-    if (LOOTBOX_LIVE && CONTRACT_APP_ID) {
+    if (LOOTBOX_LIVE) {
       const prior = await findExistingDistribution(getLootboxMasterAddress(), paymentTxId);
       if (prior) {
         const wonPrize = prizes.find((p) => p.id === prior.prizeId);
@@ -278,67 +291,81 @@ export async function POST(request: NextRequest) {
 
     // --- Live mode ---
 
-    if (!CONTRACT_APP_ID) {
-      throw new Error("Loot box contract is not configured.");
-    }
+    let randomValue: number;
 
-    // Verify the payment is in an atomic group (payment + app call commit)
-    if (!txnInfo.group) {
-      throw new Error("Payment must be part of a commit transaction group.");
-    }
+    if (USE_BEACON) {
+      // Beacon mode: the user has already submitted an on-chain reveal() call;
+      // verify it and read the contract's VRF return value.
 
-    // In live mode, the user must also submit an on-chain reveal() call.
-    // Release the claimed paymentTxId on validation errors so the user can
-    // retry with a corrected revealTxId.
-    if (!revealTxId) {
-      if (claimedTxId) {
-        usedPaymentTxIds.delete(claimedTxId);
-        usedTxTimestamps.delete(claimedTxId);
+      if (!CONTRACT_APP_ID) {
+        throw new Error("Loot box contract is not configured.");
       }
-      return NextResponse.json(
-        { error: "A reveal transaction ID is required." },
-        { status: 400 }
-      );
-    }
 
-    if (!ALGO_TXID_REGEX.test(revealTxId)) {
-      if (claimedTxId) {
-        usedPaymentTxIds.delete(claimedTxId);
-        usedTxTimestamps.delete(claimedTxId);
+      // Verify the payment is in an atomic group (payment + app call commit)
+      if (!txnInfo.group) {
+        throw new Error("Payment must be part of a commit transaction group.");
       }
-      return NextResponse.json(
-        { error: "Invalid transaction ID format." },
-        { status: 400 }
+
+      // Release the claimed paymentTxId on validation errors so the user can
+      // retry with a corrected revealTxId.
+      if (!revealTxId) {
+        if (claimedTxId) {
+          usedPaymentTxIds.delete(claimedTxId);
+          usedTxTimestamps.delete(claimedTxId);
+        }
+        return NextResponse.json(
+          { error: "A reveal transaction ID is required." },
+          { status: 400 }
+        );
+      }
+
+      if (!ALGO_TXID_REGEX.test(revealTxId)) {
+        if (claimedTxId) {
+          usedPaymentTxIds.delete(claimedTxId);
+          usedTxTimestamps.delete(claimedTxId);
+        }
+        return NextResponse.json(
+          { error: "Invalid transaction ID format." },
+          { status: 400 }
+        );
+      }
+
+      if (usedRevealTxIds.has(revealTxId)) {
+        return NextResponse.json(
+          { error: "This loot box is already being processed. Please wait a moment." },
+          { status: 409 }
+        );
+      }
+
+      // Claim the revealTxId immediately to prevent a race condition where
+      // two concurrent requests both pass the has() check above before
+      // either reaches the add(). Released in `finally`, so it's an in-flight
+      // lock rather than a permanent burn. Same pattern as paymentTxId above.
+      usedRevealTxIds.add(revealTxId);
+      usedTxTimestamps.set(revealTxId, Date.now());
+      claimedRevealTxId = revealTxId;
+
+      // Verify the on-chain reveal and read the ABI return value
+      const revealInfo = await verifyRevealTransaction(
+        revealTxId,
+        walletAddress,
+        CONTRACT_APP_ID
       );
+
+      // Derive randomness from the contract's return value (uint64 from VRF
+      // seed). Use upper 32 bits for a [0, 1) float.
+      randomValue = Number(revealInfo.returnValue >> BigInt(32)) / 0x100000000;
+    } else {
+      // Block-seed mode: no contract and no second transaction. Randomness is
+      // derived from the VRF seeds of the blocks AFTER the verified payment's
+      // confirmed round, mixed with the payment txid. verifyPayment above
+      // already proved the payment is real, recent, correctly addressed, and
+      // confirmed — its round anchors the draw.
+      if (!txnInfo.confirmedRound) {
+        throw new Error("Payment transaction not confirmed. Please try again.");
+      }
+      randomValue = await blockSeedRandomness(txnInfo.confirmedRound, paymentTxId);
     }
-
-    if (usedRevealTxIds.has(revealTxId)) {
-      return NextResponse.json(
-        { error: "This loot box is already being processed. Please wait a moment." },
-        { status: 409 }
-      );
-    }
-
-    // Claim the revealTxId immediately to prevent a race condition where
-    // two concurrent requests both pass the has() check above before
-    // either reaches the add(). Released in `finally`, so it's an in-flight
-    // lock rather than a permanent burn. Same pattern as paymentTxId above.
-    usedRevealTxIds.add(revealTxId);
-    usedTxTimestamps.set(revealTxId, Date.now());
-    claimedRevealTxId = revealTxId;
-
-    // Verify the on-chain reveal and read the ABI return value
-    const revealInfo = await verifyRevealTransaction(
-      revealTxId,
-      walletAddress,
-      CONTRACT_APP_ID
-    );
-
-    // Derive randomness from the contract's return value (uint64 from VRF seed).
-    // Use upper 32 bits for [0, 1) float — matches what extract3(seed, 0, 8)
-    // would give when reading only the first 4 bytes.
-    const upper32 = Number(revealInfo.returnValue >> BigInt(32));
-    const randomValue = upper32 / 0x100000000;
 
     const prize = resolvePrize(prizes, randomValue);
 
@@ -429,6 +456,75 @@ export async function POST(request: NextRequest) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Block-seed randomness                                               */
+/* ------------------------------------------------------------------ */
+
+// Wrap fetch with an abort timeout so a slow or hanging upstream (node,
+// indexer) fails fast and the caller's retry loop handles it, instead of one
+// stuck request consuming the whole serverless function budget.
+async function fetchWithTimeout(url: string, ms = 4000): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    return await fetch(url, { cache: "no-store", signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Read a block's 32-byte VRF seed from algod. Retries briefly: a node can
+// report a higher last-round a moment before the block itself is servable.
+async function getBlockSeed(round: number): Promise<Buffer> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      const res = await fetchWithTimeout(`${ALGOD_BASE_URL}/v2/blocks/${round}?format=json`);
+      if (res.ok) {
+        const seedB64 = (await res.json())?.block?.seed;
+        if (seedB64 && typeof seedB64 === "string") return Buffer.from(seedB64, "base64");
+      }
+      lastErr = new Error(`Block ${round} not available yet.`);
+    } catch (err) {
+      lastErr = err;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(`Block ${round} not available yet.`);
+}
+
+// Derive the random value for a payment: SHA-256 over the VRF seeds of the
+// BLOCK_SEED_COUNT blocks AFTER the payment's confirmed round, plus the payment
+// txid. The seeds don't exist yet when the buyer signs (unpredictable), the
+// txid binds the draw to this specific payment (two buyers in the same round
+// get independent results), and anyone can recompute the value from public
+// chain data to verify their prize. Waits for the needed blocks first.
+async function blockSeedRandomness(paymentRound: number, paymentTxId: string): Promise<number> {
+  const lastNeeded = paymentRound + BLOCK_SEED_COUNT;
+  const algodClient = getAlgodClient();
+  let ready = false;
+  for (let i = 0; i < 20; i++) {
+    const status = (await algodClient.status().do()) as unknown as Record<string, unknown>;
+    const last = Number(status["lastRound"] ?? status["last-round"] ?? 0);
+    if (last >= lastNeeded) {
+      ready = true;
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+  }
+  if (!ready) {
+    throw new Error("Randomness is still finalizing. Please try again.");
+  }
+  const hash = createHash("sha256");
+  for (let i = 1; i <= BLOCK_SEED_COUNT; i++) {
+    hash.update(await getBlockSeed(paymentRound + i));
+  }
+  hash.update(Buffer.from(paymentTxId));
+  // Upper 32 bits of the digest as a [0, 1) float — same normalization the
+  // beacon path uses, so resolvePrize sees an identical distribution.
+  return hash.digest().readUInt32BE(0) / 0x100000000;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Payment verification (with indexer retry loop)                     */
 /* ------------------------------------------------------------------ */
 
@@ -437,7 +533,7 @@ async function verifyPayment(
   expectedSender: string,
   expectedReceiver: string,
   expectedAmountMicroAlgo: number
-): Promise<{ ok: boolean; reason?: string; group?: string }> {
+): Promise<{ ok: boolean; reason?: string; group?: string; confirmedRound?: number }> {
   const MAX_RETRIES = 12;
   const BASE_DELAY_MS = 2000;
 
@@ -512,7 +608,7 @@ async function verifyPayment(
 
       const group = typeof txn.group === "string" ? txn.group : undefined;
 
-      return { ok: true, group };
+      return { ok: true, group, confirmedRound: Number(txn["confirmed-round"]) };
     } catch (err) {
       if (attempt < MAX_RETRIES - 1) {
         await new Promise(function (resolve) {
