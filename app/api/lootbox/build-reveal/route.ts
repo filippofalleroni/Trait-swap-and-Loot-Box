@@ -54,6 +54,38 @@ function getClientIp(request: Request): string {
   return forwarded?.split(",")[0]?.trim() || "unknown";
 }
 
+// The beacon app id lives in the contract's global state under the key
+// "beacon" (set at deploy time). Cached after the first read — it only changes
+// via a creator-only configure() call, which in practice means a redeploy.
+let cachedBeaconAppId: number | null = null;
+
+async function getBeaconAppId(
+  algodClient: algosdk.Algodv2,
+  contractAppId: number
+): Promise<number | null> {
+  if (cachedBeaconAppId) return cachedBeaconAppId;
+  try {
+    const app = (await algodClient
+      .getApplicationByID(contractAppId)
+      .do()) as unknown as Record<string, unknown>;
+    const params = (app["params"] ?? {}) as Record<string, unknown>;
+    const globalState = (params["globalState"] ??
+      params["global-state"] ??
+      []) as Array<{ key: string; value: { uint?: number | bigint } }>;
+    const beaconKey = Buffer.from("beacon").toString("base64");
+    const entry = globalState.find((kv) => kv.key === beaconKey);
+    const id = entry?.value?.uint != null ? Number(entry.value.uint) : 0;
+    if (id > 0) {
+      cachedBeaconAppId = id;
+      return id;
+    }
+    return null;
+  } catch (err) {
+    console.error("[lootbox/build-reveal] Failed to read beacon app id:", err);
+    return null;
+  }
+}
+
 export async function POST(request: Request) {
   try {
     if (!USE_BEACON) {
@@ -105,6 +137,24 @@ export async function POST(request: Request) {
     const algodClient = getAlgodClient();
     const suggestedParams = await algodClient.getTransactionParams().do();
 
+    // reveal() inner-calls the Randomness Beacon, so the outer transaction must
+    // reference the beacon app and pay its inner fee. Read the beacon app id
+    // from the contract's own global state (key "beacon") — it's configured at
+    // deploy time, so there's no separate env var to drift out of sync.
+    const beaconAppId = await getBeaconAppId(algodClient, CONTRACT_APP_ID);
+    if (!beaconAppId) {
+      return NextResponse.json(
+        { error: "Loot box contract is missing its beacon configuration." },
+        { status: 500 }
+      );
+    }
+
+    // Flat 3x min fee: the outer call + the inner beacon call, with headroom
+    // for any beacon-internal inner transactions.
+    const minFee = BigInt(suggestedParams.minFee ?? 1000);
+    suggestedParams.flatFee = true;
+    suggestedParams.fee = minFee * BigInt(3);
+
     const revealSelector = new Uint8Array(
       Buffer.from(
         crypto.createHash("sha512-256").update("reveal()uint64").digest()
@@ -112,13 +162,18 @@ export async function POST(request: Request) {
     );
 
     const senderPk = algosdk.decodeAddress(walletAddress).publicKey;
+    // Commit boxes are keyed 'c' + pubkey (the contract's BoxMap prefix).
+    const commitBoxName = new Uint8Array(
+      Buffer.concat([Buffer.from("c"), Buffer.from(senderPk)])
+    );
 
     const appCallTxn = algosdk.makeApplicationCallTxnFromObject({
       sender: walletAddress,
       appIndex: CONTRACT_APP_ID,
       onComplete: algosdk.OnApplicationComplete.NoOpOC,
       appArgs: [revealSelector],
-      boxes: [{ appIndex: CONTRACT_APP_ID, name: senderPk }],
+      foreignApps: [beaconAppId],
+      boxes: [{ appIndex: CONTRACT_APP_ID, name: commitBoxName }],
       suggestedParams,
     });
 

@@ -138,12 +138,18 @@ export async function POST(request: Request) {
         ).subarray(0, 4)
       );
       const senderPk = algosdk.decodeAddress(walletAddress).publicKey;
+      // The contract's commit box is keyed with the BoxMap prefix 'c' + the
+      // sender's 32-byte public key — the box reference must match exactly or
+      // the AVM rejects the call with "invalid Box reference".
+      const commitBoxName = new Uint8Array(
+        Buffer.concat([Buffer.from("c"), Buffer.from(senderPk)])
+      );
       const appCallTxn = algosdk.makeApplicationCallTxnFromObject({
         sender: walletAddress,
         appIndex: CONTRACT_APP_ID,
         onComplete: algosdk.OnApplicationComplete.NoOpOC,
         appArgs: [commitSelector],
-        boxes: [{ appIndex: CONTRACT_APP_ID, name: senderPk }],
+        boxes: [{ appIndex: CONTRACT_APP_ID, name: commitBoxName }],
         suggestedParams,
       });
 
