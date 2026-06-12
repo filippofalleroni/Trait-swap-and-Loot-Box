@@ -24,6 +24,24 @@ const challenges = new Map<string, { nonce: string; expires: number }>();
 const SESSION_TTL_MS = 60 * 60 * 1000; // 1 hour
 const sessions = new Map<string, number>(); // address -> expiresAt timestamp
 
+// Cryptographically verify the Ed25519 signature over the transaction's signing
+// bytes using the sender's public key. This is the actual proof that the admin
+// wallet's private key signed the challenge — the sender and note are otherwise
+// just forgeable fields. Verifying over txn.bytesToSign() (the exact bytes the
+// wallet signed) avoids any re-encoding mismatch across wallets.
+function verifyTxnSignature(txn: algosdk.Transaction, sig: Uint8Array): boolean {
+  try {
+    const der = Buffer.concat([
+      Buffer.from("302a300506032b6570032100", "hex"), // SPKI prefix for Ed25519
+      Buffer.from(txn.sender.publicKey),
+    ]);
+    const key = crypto.createPublicKey({ key: der, format: "der", type: "spki" });
+    return crypto.verify(null, Buffer.from(txn.bytesToSign()), key, Buffer.from(sig));
+  } catch {
+    return false;
+  }
+}
+
 function pruneExpiredChallenges() {
   const now = Date.now();
   challenges.forEach((val, key) => {
@@ -108,6 +126,9 @@ export async function adminCreateSession(
   if (!decoded.sig) {
     throw new Error("Transaction is missing a signature.");
   }
+  if (!verifyTxnSignature(txn, decoded.sig)) {
+    throw new Error("Signature verification failed.");
+  }
 
   // Must be a payment transaction — reject asset transfers, app calls, etc.
   if (txn.type !== algosdk.TransactionType.pay) {
@@ -140,13 +161,10 @@ export async function adminCreateSession(
     throw new Error("Challenge transaction must have zero amount.");
   }
 
-  // The wallet signed this transaction, proving ownership of the sender address.
-  // We verify sender matches the claimed admin wallet, the note contains our
-  // challenge nonce, and the transaction is a harmless zero-amount self-payment.
-  // Explicit ed25519 re-verification is skipped because algosdk v3's
-  // encodeUnsignedTransaction() re-encoding can differ from the original
-  // encoding the wallet signed, causing false negatives across wallet
-  // implementations (Pera, Defly, etc.).
+  // The Ed25519 signature above proves the admin wallet's key signed this exact
+  // transaction; the sender check ties it to an authorized admin, and the note
+  // check below binds it to our one-time challenge nonce (anti-replay). The txn
+  // is a harmless zero-amount self-payment that is never submitted.
 
   // Verify the note contains our challenge nonce with the expected prefix.
   const noteStr = txn.note
