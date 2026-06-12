@@ -72,10 +72,111 @@ function getClientIp(request: NextRequest): string {
   return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
 }
 
-// NOTE: In-memory -- resets on serverless cold start. Use Redis/KV for production.
+// NOTE: In-memory -- resets on serverless cold start. When Vercel Blob is
+// configured (BLOB_READ_WRITE_TOKEN), the durable markers below take over as
+// the real replay guard and this set is just a same-instance fast path.
 const usedMintTxIds = new Set<string>();
 const usedMintTxTimestamps = new Map<string, number>();
 const MAX_USED_TX_AGE_MS = 1000 * 60 * 60;
+
+function releaseInMemoryClaim(txId: string) {
+  usedMintTxIds.delete(txId);
+  usedMintTxTimestamps.delete(txId);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Durable replay protection (Vercel Blob, optional)                  */
+/*                                                                     */
+/*  Two markers:                                                       */
+/*  - used-mint-tx/<txId>: permanent "payment consumed", written once  */
+/*    the ARC-19 update has been submitted.                            */
+/*  - mint-tx-claim/<txId>: in-flight claim taken before the           */
+/*    irreversible work (IPFS uploads, asset config tx). Deleted when  */
+/*    an attempt fails; if the function dies without cleanup (killed   */
+/*    at maxDuration), the claim goes stale after STALE_CLAIM_MS and a */
+/*    later retry can reclaim the payment instead of it staying        */
+/*    burned forever.                                                  */
+/*                                                                     */
+/*  Blob has no compare-and-set, so two requests racing the claim      */
+/*  window could both proceed; the in-memory claim covers the          */
+/*  same-instance case. Without BLOB_READ_WRITE_TOKEN every helper is  */
+/*  a no-op and the short payment-age window below is the only         */
+/*  cross-instance replay guard.                                       */
+/* ------------------------------------------------------------------ */
+
+function isBlobConfigured(): boolean {
+  return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+}
+
+const STALE_CLAIM_MS = (60 + 60) * 1000; // maxDuration + margin
+
+/**
+ * Payments are retryable while unconsumed, so the age window decides how long
+ * a paid-but-failed swap can still be completed. With durable markers a spent
+ * payment can never be replayed, so allow a week. Without them, age is the
+ * only guard that survives a cold start — keep the window tight.
+ */
+function paymentMaxAgeSeconds(): number {
+  return isBlobConfigured() ? 60 * 60 * 24 * 7 : 300;
+}
+
+async function isMintTxConsumed(txId: string): Promise<boolean> {
+  if (!isBlobConfigured()) return false;
+  try {
+    const { head } = await import("@vercel/blob");
+    await head(`used-mint-tx/${txId}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function getMintTxClaimAgeMs(txId: string): Promise<number | null> {
+  if (!isBlobConfigured()) return null;
+  try {
+    const { head } = await import("@vercel/blob");
+    const meta = await head(`mint-tx-claim/${txId}`);
+    return Date.now() - new Date(meta.uploadedAt).getTime();
+  } catch {
+    return null;
+  }
+}
+
+async function putMintTxClaim(txId: string): Promise<void> {
+  if (!isBlobConfigured()) return;
+  const { put } = await import("@vercel/blob");
+  await put(`mint-tx-claim/${txId}`, Date.now().toString(), {
+    access: "public",
+    addRandomSuffix: false,
+    allowOverwrite: true,
+  });
+}
+
+async function deleteMintTxClaim(txId: string): Promise<void> {
+  if (!isBlobConfigured()) return;
+  try {
+    const { del } = await import("@vercel/blob");
+    await del(`mint-tx-claim/${txId}`);
+  } catch {
+    // Best-effort cleanup
+  }
+}
+
+async function markMintTxConsumed(txId: string): Promise<void> {
+  if (!isBlobConfigured()) return;
+  try {
+    const { put } = await import("@vercel/blob");
+    await put(`used-mint-tx/${txId}`, Date.now().toString(), {
+      access: "public",
+      addRandomSuffix: false,
+      allowOverwrite: true,
+    });
+  } catch (err) {
+    // The claim alone would go stale and allow reuse — log so the payment
+    // can be consumed manually if this ever happens.
+    console.error("[trait-lab/mint] Failed to write consumed marker for", txId, err);
+  }
+}
 
 /* ------------------------------------------------------------------ */
 /*  Concurrent update guard (per asset ID, single instance only)       */
@@ -172,6 +273,22 @@ export async function POST(request: NextRequest) {
     usedMintTxTimestamps.set(paymentTxId, Date.now());
     claimedTxId = paymentTxId;
 
+    if (await isMintTxConsumed(paymentTxId)) {
+      return NextResponse.json(
+        { error: "This transaction has already been used." },
+        { status: 409 }
+      );
+    }
+
+    const claimAgeMs = await getMintTxClaimAgeMs(paymentTxId);
+    if (claimAgeMs !== null && claimAgeMs < STALE_CLAIM_MS) {
+      releaseInMemoryClaim(paymentTxId);
+      return NextResponse.json(
+        { error: "This payment is still being processed. Please wait a minute, then retry." },
+        { status: 409 }
+      );
+    }
+
     if (!TRAIT_ID_REGEX.test(newTraitId)) {
       usedMintTxIds.delete(paymentTxId);
       usedMintTxTimestamps.delete(paymentTxId);
@@ -220,16 +337,18 @@ export async function POST(request: NextRequest) {
     });
 
     if (!paymentValid.ok) {
-      usedMintTxIds.delete(paymentTxId);
-      usedMintTxTimestamps.delete(paymentTxId);
+      releaseInMemoryClaim(paymentTxId);
       console.error("[trait-lab/mint] Payment verification failed:", paymentValid.reason);
       return NextResponse.json(
-        { error: "Payment verification failed." },
+        { error: paymentValid.reason ?? "Payment verification failed." },
         { status: 400 }
       );
     }
 
     paymentVerified = true;
+
+    // Payment verified — claim the txId before doing irreversible work.
+    await putMintTxClaim(paymentTxId);
 
     const ownershipValid = await verifyOwnership({
       assetId: nftAssetId,
@@ -237,6 +356,10 @@ export async function POST(request: NextRequest) {
     });
 
     if (!ownershipValid) {
+      // No update happened, so the honest payment stays retryable (e.g. the
+      // user can retry after selecting an NFT they actually own).
+      await deleteMintTxClaim(paymentTxId);
+      releaseInMemoryClaim(paymentTxId);
       return NextResponse.json(
         { error: "Wallet does not own this NFT" },
         { status: 403 }
@@ -252,6 +375,8 @@ export async function POST(request: NextRequest) {
         : null;
 
     if (!category) {
+      await deleteMintTxClaim(paymentTxId);
+      releaseInMemoryClaim(paymentTxId);
       return NextResponse.json(
         { error: "Invalid trait category" },
         { status: 400 }
@@ -264,6 +389,8 @@ export async function POST(request: NextRequest) {
       const creatorAddr = process.env.COLLECTION_CREATOR_ADDRESS?.trim();
       if (!creatorAddr || creatorAddr === "YOUR_COLLECTION_CREATOR_ADDRESS") {
         console.error("[trait-lab/mint] ARC19_LIVE_UPDATES_ENABLED is true but COLLECTION_CREATOR_ADDRESS is not configured.");
+        await deleteMintTxClaim(paymentTxId);
+        releaseInMemoryClaim(paymentTxId);
         return NextResponse.json(
           { error: "Server configuration error. Please contact the administrator." },
           { status: 500 }
@@ -272,6 +399,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!isLive) {
+      await markMintTxConsumed(paymentTxId);
       return NextResponse.json({
         status: "prepared" as const,
         note: isRemoval
@@ -281,6 +409,8 @@ export async function POST(request: NextRequest) {
     }
 
     if (activeUpdates.has(nftAssetId)) {
+      await deleteMintTxClaim(paymentTxId);
+      releaseInMemoryClaim(paymentTxId);
       return NextResponse.json(
         { error: "This NFT is already being updated. Please wait and try again." },
         { status: 409 }
@@ -292,6 +422,8 @@ export async function POST(request: NextRequest) {
       const currentMetadata = await fetchCurrentMetadata(nftAssetId);
 
       if (!currentMetadata) {
+        await deleteMintTxClaim(paymentTxId);
+        releaseInMemoryClaim(paymentTxId);
         return NextResponse.json(
           { error: "Could not load NFT metadata. Please try again." },
           { status: 503 }
@@ -343,6 +475,10 @@ export async function POST(request: NextRequest) {
         `[trait-lab/mint] OK wallet=${walletAddress} asset=${nftAssetId} trait=${newTraitId} payTx=${paymentTxId} updateTx=${updateTxId ?? "N/A"}`
       );
 
+      // The update is on-chain — permanently consume the payment. The
+      // in-flight claim alone would go stale and allow reuse.
+      await markMintTxConsumed(paymentTxId);
+
       return NextResponse.json({
         status: "submitted" as const,
         note: isRemoval
@@ -353,23 +489,20 @@ export async function POST(request: NextRequest) {
       activeUpdates.delete(nftAssetId);
     }
   } catch (err) {
-    // Only release the txId if payment was NOT yet verified on-chain.
-    // Once verified, the payment is consumed — keeping it claimed prevents
-    // the same on-chain payment from being reused with different parameters.
+    // Payment not verified yet — nothing was consumed, free the txId.
     if (claimedTxId && !paymentVerified) {
-      usedMintTxIds.delete(claimedTxId);
-      usedMintTxTimestamps.delete(claimedTxId);
+      releaseInMemoryClaim(claimedTxId);
     }
     // If payment was verified but composition/upload/ARC-19 failed due to
-    // a transient issue, un-burn the txId so the user can retry.
+    // a transient issue, release the claim so the user can retry.
     if (paymentVerified && claimedTxId) {
       const raw = err instanceof Error ? err.message : "";
       const isUserError =
         raw.includes("does not own") ||
         raw.includes("Invalid trait");
       if (!isUserError) {
-        usedMintTxIds.delete(claimedTxId);
-        usedMintTxTimestamps.delete(claimedTxId);
+        await deleteMintTxClaim(claimedTxId);
+        releaseInMemoryClaim(claimedTxId);
       }
     }
     console.error("[trait-lab/mint] Error:", err);
@@ -470,7 +603,7 @@ async function verifyPayment({
       if (txAge < 0) {
         return { ok: false, reason: "Transaction round time is in the future." };
       }
-      if (txAge > 300) {
+      if (txAge > paymentMaxAgeSeconds()) {
         return { ok: false, reason: "Transaction is too old. Please submit a new payment" };
       }
 

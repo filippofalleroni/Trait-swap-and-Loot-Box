@@ -130,7 +130,7 @@ Copy `.env.example` to `.env.local` and configure:
 
 | Variable | Description | Default |
 |---|---|---|
-| `BLOB_READ_WRITE_TOKEN` | Vercel Blob storage token for persisting prize configuration across deployments. Without this, prize config saves to `/tmp/` (resets on redeploy). | *(empty)* |
+| `BLOB_READ_WRITE_TOKEN` | Vercel Blob storage token. Persists prize configuration across deployments, and enables durable trait-swap replay protection: spent payments are permanently marked as consumed, which lets a paid-but-failed swap be retried for up to 7 days without being charged again. Without this, replay tracking is in-memory only and failed swaps must be retried within 5 minutes. | *(empty)* |
 | `LOOTBOX_PRIZES_BLOB_URL` | Optional fallback URL to the Blob-stored prize JSON. When `BLOB_READ_WRITE_TOKEN` is set, the prize and reveal routes automatically find admin-saved prizes via the Blob SDK. Only needed if automatic lookup fails. | *(empty)* |
 
 ---
@@ -162,6 +162,8 @@ Customize these files in the `config/` directory before deploying:
 8. **Done** -- The NFT's on-chain metadata pointer now references updated content. Any ARC-19-aware wallet or explorer displays the new image.
 
 Trait removal follows the same flow but clears the trait from the metadata properties instead of adding one.
+
+If the update fails after the payment confirmed (network interruption, timeout), the payment is not lost: the UI offers a **Retry** button and a recovery banner that survives page reloads. Retrying re-verifies the original payment and completes exactly the swap that was paid for — the NFT and trait are stored with the pending payment — without charging again.
 
 ---
 
@@ -289,7 +291,7 @@ Admin access requires signing a challenge nonce with the wallet's Ed25519 key. T
 
 ### Production Recommendations
 
-- **Persistent replay protection (trait swap)** -- The trait-swap route tracks used transaction IDs in memory, which resets on server restart. For production, store used IDs in Redis, Vercel KV, or a database. (Loot box distribution does not depend on this — it is made idempotent on-chain via the payment-keyed distribution note, so it survives restarts and cold starts; see [Reliability](#reliability) above.)
+- **Persistent replay protection (trait swap)** -- Set `BLOB_READ_WRITE_TOKEN` so used payment transaction IDs are durably marked in Vercel Blob: spent payments can never be replayed, and a paid swap whose update failed stays retryable for 7 days (the user is never charged twice). Without the token, used IDs are tracked in memory only (resets on restart) and a tight 5-minute payment-age window is the only cross-instance replay guard. (Loot box distribution does not depend on this — it is made idempotent on-chain via the payment-keyed distribution note, so it survives restarts and cold starts; see [Reliability](#reliability) above.)
 - **Session persistence** -- Admin sessions are in-memory. Use encrypted httpOnly cookies or a session store for production.
 - **Persistent rate limiting** -- The in-memory rate limiters reset on restart. Use edge middleware or a distributed store for production.
 - **Smart contract audit** -- The included contract is a reference implementation. Have it reviewed before deploying with real funds.
@@ -410,7 +412,6 @@ Contributions are welcome.
 ### Ideas for Contributions
 
 - Unit tests for prize resolution and ARC-19 address computation
-- Persistent transaction replay protection for trait swap (database-backed)
 - Database-backed trait registry (replacing `mock-data.ts`)
 - Support for ARC-69 metadata in addition to ARC-19
 - Additional wallet support (Exodus, WalletConnect v2)
