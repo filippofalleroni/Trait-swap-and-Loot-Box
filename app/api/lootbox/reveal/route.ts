@@ -42,7 +42,9 @@ const MAX_REVEAL_AGE_SECONDS = 300;
 
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT_WINDOW_MS = 60_000;
-const RATE_LIMIT_MAX = 5;
+// A live open legitimately calls reveal twice (the roll, then the claim after
+// an asset opt-in) plus the occasional retry — allow headroom for that.
+const RATE_LIMIT_MAX = 12;
 
 const ipRateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const IP_RATE_LIMIT_MAX = 20;
@@ -367,7 +369,41 @@ export async function POST(request: NextRequest) {
       randomValue = await blockSeedRandomness(txnInfo.confirmedRound, paymentTxId);
     }
 
-    const prize = resolvePrize(prizes, randomValue);
+    // Drop NFT tiers the master wallet no longer holds (e.g. a one-of-one that
+    // was already won) so the draw can't land on an undeliverable prize. Token
+    // and ALGO tiers are always deliverable (subject to balance).
+    const heldIds = await getMasterHeldAssetIds(getLootboxMasterAddress());
+    const deliverable = heldIds
+      ? prizes.filter((p) => p.type !== "nft" || heldIds.has(p.assetId))
+      : prizes;
+    if (deliverable.length === 0) {
+      throw new Error("No prizes are currently available.");
+    }
+
+    // The draw is a pure function of on-chain data (block seeds + txid, or the
+    // contract's logged VRF value) over the deliverable pool — so a repeat call
+    // for the same payment recomputes the SAME prize. That's what makes the
+    // opt-in round-trip below safe without any server-side prize lock.
+    const prize = resolvePrize(deliverable, randomValue);
+
+    // ASA prizes can only be received by accounts opted into the asset. If the
+    // winner isn't opted in yet, tell the client which asset to opt into; it
+    // opts in (a free transaction) and calls back, and the deterministic
+    // recompute above lands on the same prize for delivery.
+    if (prize.assetId > 0 && !(await isOptedIn(walletAddress, prize.assetId))) {
+      return NextResponse.json({
+        status: "needs-optin",
+        assetId: prize.assetId,
+        prize: {
+          id: prize.id,
+          name: prize.name,
+          type: prize.type,
+          rarity: prize.rarity,
+          color: prize.color,
+        },
+        paymentTxId,
+      });
+    }
 
     // Refuse to distribute if ALL prizes look unconfigured (assetId 0 AND amount 0).
     // Note: assetId 0 with amount > 0 is a valid ALGO prize.
@@ -452,6 +488,47 @@ export async function POST(request: NextRequest) {
       usedRevealTxIds.delete(claimedRevealTxId);
       usedTxTimestamps.delete(claimedRevealTxId);
     }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Opt-in + deliverability checks                                      */
+/* ------------------------------------------------------------------ */
+
+// Whether `address` holds (is opted into) `assetId`. Uses algod rather than the
+// indexer so a just-confirmed opt-in is seen immediately — the client opts in,
+// then calls straight back to claim, and that retry must not bounce on
+// indexer lag.
+async function isOptedIn(address: string, assetId: number): Promise<boolean> {
+  try {
+    const algodClient = getAlgodClient();
+    const info = (await algodClient.accountInformation(address).do()) as unknown as Record<string, unknown>;
+    const assets = info["assets"] as Array<Record<string, unknown>> | undefined;
+    return Boolean(
+      assets?.some((a) => Number(a["asset-id"] ?? a["assetId"] ?? a["asset_id"]) === assetId)
+    );
+  } catch {
+    return false;
+  }
+}
+
+// The set of asset ids the master wallet currently holds with a positive
+// balance. Used to drop NFT tiers that can no longer be delivered (e.g. a
+// one-of-one that was already won) before the prize is drawn.
+async function getMasterHeldAssetIds(masterAddress: string): Promise<Set<number> | null> {
+  try {
+    const algodClient = getAlgodClient();
+    const info = (await algodClient.accountInformation(masterAddress).do()) as unknown as Record<string, unknown>;
+    const assets = info["assets"] as Array<Record<string, unknown>> | undefined;
+    return new Set(
+      (assets ?? [])
+        .filter((a) => Number(a["amount"] ?? 0) > 0)
+        .map((a) => Number(a["asset-id"] ?? a["assetId"] ?? a["asset_id"]))
+    );
+  } catch {
+    // On failure, return null and let the caller keep the full pool — the
+    // distributor still refuses to send anything the master doesn't hold.
+    return null;
   }
 }
 

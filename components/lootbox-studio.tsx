@@ -11,6 +11,10 @@ import type { PrizeTier, PrizeRarity } from "@/lib/types";
 /*  Types                                                             */
 /* ------------------------------------------------------------------ */
 
+// Block-seed mode:  idle → committing → signing(payment) → distributing → success
+// Beacon mode:      idle → committing → signing(payment) → waiting-vrf →
+//                   revealing(sign) → distributing → success
+// Either mode adds one extra signing(optin) step if the won asset isn't held.
 type LootboxState =
   | "idle"
   | "committing"
@@ -21,14 +25,21 @@ type LootboxState =
   | "success"
   | "error";
 
+// What the current wallet prompt is for, so the modal can label it clearly.
+type SignContext = "payment" | "optin";
+
+type RandomnessMode = "block-seed" | "beacon";
+
+interface PrizeSummary {
+  id: string;
+  name: string;
+  type: string;
+  rarity: PrizeRarity;
+  color: string;
+}
+
 interface RevealResult {
-  prize: {
-    id: string;
-    name: string;
-    type: string;
-    rarity: PrizeRarity;
-    color: string;
-  };
+  prize: PrizeSummary;
   paymentTxId: string;
   distributionTxId: string;
   status: string;
@@ -37,13 +48,59 @@ interface RevealResult {
 interface PendingReveal {
   walletAddress: string;
   paymentTxId: string;
+  mode: RandomnessMode;
   commitRound: number;
   revealTxId?: string;
 }
 
 const PENDING_KEY = "lootbox_pending_reveal";
-const MAX_GROUP_SIZE = 16;
 const MIN_WAIT_ROUNDS = 9;
+
+// Light flavour text shown while the prize is being drawn + delivered — the
+// wait the user actually stares at. One is picked per open for variety.
+const WAIT_QUIPS = [
+  "Shaking the loot box as hard as we can…",
+  "The dice are tumbling across the blockchain…",
+  "Drawing your prize from freshly minted block seeds…",
+  "Consulting the chain's crystal ball…",
+  "Sorting the loot… nearly there…",
+];
+
+/* ------------------------------------------------------------------ */
+/*  Error humanizing                                                  */
+/* ------------------------------------------------------------------ */
+
+// Map raw wallet/node errors to plain language. Anything that looks like a raw
+// chain/SDK error is never shown to a player; the original is logged instead.
+function humanizeError(raw: string): string {
+  const m = raw.toLowerCase();
+  if (
+    m.includes("overspend") ||
+    m.includes("tried to spend") ||
+    m.includes("insufficient") ||
+    (m.includes("balance") && m.includes("below"))
+  ) {
+    return "You don't have enough ALGO in your wallet to open a loot box.";
+  }
+  if (
+    m.includes("failed to fetch") ||
+    m.includes("networkerror") ||
+    m.includes("network request") ||
+    m.includes("err_internet")
+  ) {
+    return "Connection issue — please check your internet and try again.";
+  }
+  if (
+    m.includes("logic eval") ||
+    m.includes("transactionpool") ||
+    m.includes("opcodes") ||
+    m.includes("pc=") ||
+    raw.length > 200
+  ) {
+    return "Something went wrong opening your loot box. Please try again.";
+  }
+  return raw;
+}
 
 /* ------------------------------------------------------------------ */
 /*  Rarity helpers                                                    */
@@ -73,31 +130,53 @@ const RARITY_GLOW: Record<PrizeRarity, string> = {
   legendary: "shadow-amber-500/40 shadow-lg",
 };
 
+const RARITY_EMOJI: Record<PrizeRarity, string> = {
+  common: "\u{1F381}",
+  uncommon: "\u{1F381}",
+  rare: "\u{1F48E}",
+  epic: "✨",
+  legendary: "⭐",
+};
+
 /* ------------------------------------------------------------------ */
 /*  Component                                                         */
 /* ------------------------------------------------------------------ */
 
 export default function LootboxStudio() {
-  const { walletAddress, signTransactions } = useWallet();
+  const { walletAddress, signTransactions, disconnectWallet } = useWallet();
 
   const [state, setState] = useState<LootboxState>("idle");
+  const [signContext, setSignContext] = useState<SignContext>("payment");
   const [prizes, setPrizes] = useState<PrizeTier[]>([]);
   const [prizesLoaded, setPrizesLoaded] = useState(false);
   const [result, setResult] = useState<RevealResult | null>(null);
+  // The won-but-not-yet-delivered prize (the opt-in step), shown on screen so
+  // the "approve to receive" signature is never a blind sign.
+  const [pendingPrize, setPendingPrize] = useState<PrizeSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [walletResetNeeded, setWalletResetNeeded] = useState(false);
   const [showPrizes, setShowPrizes] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [playAgainFlag, setPlayAgainFlag] = useState(false);
-  const [cratesOpened, setCratesOpened] = useState(0);
   const [buyerBalance, setBuyerBalance] = useState<number | null>(null);
   const [vrfProgress, setVrfProgress] = useState("");
+  const [quip, setQuip] = useState(WAIT_QUIPS[0]);
+  // Reentrancy guard: a money flow must never double-fire and submit twice.
   const processingRef = useRef(false);
+  // Identifies the current open attempt. Cancelling (or starting a new attempt)
+  // bumps this so a wallet signature that resolves AFTER the user backed out is
+  // ignored instead of silently submitting a payment.
+  const attemptRef = useRef(0);
   const [pendingReveal, setPendingReveal] = useState<PendingReveal | null>(
     () => {
       if (typeof window === "undefined") return null;
       try {
         const stored = localStorage.getItem(PENDING_KEY);
-        return stored ? JSON.parse(stored) : null;
+        if (!stored) return null;
+        const parsed = JSON.parse(stored) as Partial<PendingReveal>;
+        // Drop records from incompatible versions of this component.
+        if (parsed.mode !== "block-seed" && parsed.mode !== "beacon") return null;
+        return parsed as PendingReveal;
       } catch {
         return null;
       }
@@ -105,7 +184,7 @@ export default function LootboxStudio() {
   );
 
   /* ---------------------------------------------------------------- */
-  /*  Sync pendingReveal to sessionStorage                            */
+  /*  Sync pendingReveal to localStorage                              */
   /* ---------------------------------------------------------------- */
 
   useEffect(() => {
@@ -177,7 +256,7 @@ export default function LootboxStudio() {
   );
 
   /* ---------------------------------------------------------------- */
-  /*  Wait for VRF rounds to pass                                     */
+  /*  Beacon mode: wait for the target VRF round                      */
   /* ---------------------------------------------------------------- */
 
   async function waitForVrfRounds(
@@ -187,7 +266,9 @@ export default function LootboxStudio() {
     const targetRound = commitRound + MIN_WAIT_ROUNDS;
     for (let i = 0; i < 30; i++) {
       const status = (await algodClient.status().do()) as unknown as Record<string, unknown>;
-      const currentRound = Number(status["last-round"] ?? 0);
+      // algosdk v3 returns camelCase (lastRound); keep the kebab fallback for
+      // older SDK responses.
+      const currentRound = Number(status["lastRound"] ?? status["last-round"] ?? 0);
       if (currentRound >= targetRound) return;
       const remaining = targetRound - currentRound;
       setVrfProgress(`Waiting for randomness... ${remaining} round${remaining === 1 ? "" : "s"} remaining`);
@@ -199,7 +280,7 @@ export default function LootboxStudio() {
   }
 
   /* ---------------------------------------------------------------- */
-  /*  Build, sign, and submit the on-chain reveal                     */
+  /*  Beacon mode: build, sign, and submit the on-chain reveal        */
   /* ---------------------------------------------------------------- */
 
   async function submitOnChainReveal(
@@ -238,11 +319,43 @@ export default function LootboxStudio() {
   }
 
   /* ---------------------------------------------------------------- */
-  /*  Server reveal call (distributes prize)                          */
+  /*  Opt into a single won asset (free, zero-amount self-transfer)   */
+  /* ---------------------------------------------------------------- */
+
+  const ensureOptedIn = useCallback(
+    async (address: string, assetId: number) => {
+      const algodClient = new algosdk.Algodv2("", ALGOD_BASE_URL, "");
+      const suggestedParams = await algodClient.getTransactionParams().do();
+      const optInTxn = algosdk.makeAssetTransferTxnWithSuggestedParamsFromObject({
+        sender: address,
+        receiver: address,
+        assetIndex: assetId,
+        amount: 0,
+        suggestedParams,
+      });
+      const signed = await signTransactions!([
+        algosdk.encodeUnsignedTransaction(optInTxn),
+      ]);
+      if (!signed[0]) {
+        throw new Error("Wallet declined to sign the opt-in transaction.");
+      }
+      const { txid } = await algodClient.sendRawTransaction([signed[0]]).do();
+      await algosdk.waitForConfirmation(algodClient, txid as string, 4);
+    },
+    [signTransactions]
+  );
+
+  /* ---------------------------------------------------------------- */
+  /*  Server reveal call (rolls + distributes the prize)              */
   /* ---------------------------------------------------------------- */
 
   const callServerReveal = useCallback(
-    async (address: string, paymentTxId: string, revealTxId?: string) => {
+    async (
+      address: string,
+      paymentTxId: string,
+      revealTxId?: string,
+      optInAttempted = false
+    ): Promise<void> => {
       setState("distributing");
 
       const res = await fetch("/api/lootbox/reveal", {
@@ -262,7 +375,7 @@ export default function LootboxStudio() {
         }
         const errObj = errData as Record<string, unknown>;
         const serverError = (errObj.error as string) || `Reveal failed (${res.status})`;
-        // If the server says the transaction is too old, the commit is
+        // If the server says the transaction is too old, the open is
         // irrecoverable — clear pendingReveal so the green "your payment
         // went through" reassurance box doesn't mislead the user.
         if (serverError.toLowerCase().includes("too old")) {
@@ -277,18 +390,43 @@ export default function LootboxStudio() {
         throw new Error(serverError);
       }
 
-      const data: RevealResult = await res.json();
+      const data = (await res.json()) as RevealResult & {
+        status: string;
+        assetId?: number;
+      };
+
+      // The prize was rolled but the wallet isn't opted into the won asset yet:
+      // opt into that ONE asset (free), then call back. The server's draw is
+      // deterministic for this payment, so the recompute lands on the same
+      // prize and delivers it.
+      if (data.status === "needs-optin") {
+        // Guard against looping if the opt-in somehow isn't seen on the retry.
+        if (optInAttempted) {
+          throw new Error("Couldn't confirm your prize opt-in. Please tap Retry.");
+        }
+        if (!data.assetId) {
+          throw new Error("Couldn't finish opening your loot box. Please tap Retry.");
+        }
+        // Show what they won so "approve to receive" isn't a blind signature.
+        if (data.prize) setPendingPrize(data.prize);
+        setSignContext("optin");
+        setState("signing");
+        await ensureOptedIn(address, data.assetId);
+        await callServerReveal(address, paymentTxId, revealTxId, true);
+        return;
+      }
+
       setPendingReveal(null);
+      setPendingPrize(null);
       setResult(data);
       setState("success");
-      setCratesOpened((c) => c + 1);
 
       fetch("/api/lootbox/prizes")
         .then((r) => r.json())
         .then((d) => { if (d.prizes) setPrizes(d.prizes); })
         .catch(() => {});
     },
-    []
+    [ensureOptedIn]
   );
 
   /* ---------------------------------------------------------------- */
@@ -299,120 +437,105 @@ export default function LootboxStudio() {
     if (!walletAddress || !signTransactions) return;
     if (processingRef.current) return;
     processingRef.current = true;
+    const myAttempt = ++attemptRef.current;
 
     setError(null);
     setResult(null);
+    setPendingPrize(null);
+    setWalletResetNeeded(false);
     setVrfProgress("");
+    setQuip(WAIT_QUIPS[Math.floor(Math.random() * WAIT_QUIPS.length)]);
     setState("committing");
-    setShowModal(true);
+    // The modal opens when there's something to show (the wallet prompt or the
+    // draw progress) — not during the brief commit fetch — so it doesn't flash
+    // a half-second card. The button shows "Opening…" meanwhile.
 
     let commitSubmitted = false;
 
     try {
       const algodClient = new algosdk.Algodv2("", ALGOD_BASE_URL, "");
 
-      // Check if we have a pending reveal to resume
+      // ---- Resume an in-flight open ---------------------------------
       const retrying =
         pendingReveal && pendingReveal.walletAddress === walletAddress;
 
-      // Check if the pending reveal is too old to be useful (> 900 rounds ~ 45 min)
-      if (retrying && pendingReveal.commitRound > 0) {
-        const status = (await algodClient.status().do()) as unknown as Record<string, unknown>;
-        const currentRound = Number(status["last-round"] ?? 0);
-        if (currentRound > pendingReveal.commitRound + 900) {
-          setPendingReveal(null);
-          throw new Error("Your previous session expired. Please open a new loot box.");
-        }
+      if (retrying) {
         commitSubmitted = true;
-      }
-
-      // If we already have a revealTxId, skip straight to server call
-      if (retrying && pendingReveal.revealTxId) {
-        await callServerReveal(
-          walletAddress,
-          pendingReveal.paymentTxId,
-          pendingReveal.revealTxId
-        );
-        return;
-      }
-
-      // commitRound 0 means the payment was submitted but never confirmed
-      // (browser crashed between sendRawTransaction and waitForConfirmation).
-      // Clear the stale record so the user isn't stuck, and show a message
-      // pointing them to their wallet history.
-      if (retrying && pendingReveal.commitRound === 0) {
-        setPendingReveal(null);
-        throw new Error(
-          "A previous payment may have been submitted but was not confirmed. " +
-          "Check your wallet transaction history. If the payment went through, " +
-          "please contact support."
-        );
-      }
-
-      // If we have a commit but no reveal yet, skip to VRF wait + reveal
-      if (retrying && pendingReveal.commitRound > 0) {
-        setState("waiting-vrf");
         setShowModal(true);
-        await waitForVrfRounds(algodClient, pendingReveal.commitRound);
 
-        setState("revealing");
-        const revealTxId = await submitOnChainReveal(algodClient, walletAddress);
-        setPendingReveal((prev) => prev ? { ...prev, revealTxId } : null);
+        // commitRound 0 means the payment was submitted but never confirmed
+        // (browser closed between sendRawTransaction and waitForConfirmation).
+        if (pendingReveal.commitRound === 0) {
+          setPendingReveal(null);
+          throw new Error(
+            "A previous payment may have been submitted but was not confirmed. " +
+            "Check your wallet transaction history. If the payment went through, " +
+            "please contact support."
+          );
+        }
 
-        await callServerReveal(walletAddress, pendingReveal.paymentTxId, revealTxId);
+        if (pendingReveal.mode === "beacon") {
+          // Beacon commits expire after the contract's reveal window.
+          const status = (await algodClient.status().do()) as unknown as Record<string, unknown>;
+          const currentRound = Number(status["lastRound"] ?? status["last-round"] ?? 0);
+          if (currentRound > pendingReveal.commitRound + 900) {
+            setPendingReveal(null);
+            throw new Error("Your previous session expired. Please open a new loot box.");
+          }
+
+          if (pendingReveal.revealTxId) {
+            await callServerReveal(
+              walletAddress,
+              pendingReveal.paymentTxId,
+              pendingReveal.revealTxId
+            );
+            return;
+          }
+
+          setState("waiting-vrf");
+          await waitForVrfRounds(algodClient, pendingReveal.commitRound);
+
+          setState("revealing");
+          const revealTxId = await submitOnChainReveal(algodClient, walletAddress);
+          if (attemptRef.current !== myAttempt) return;
+          setPendingReveal((prev) => prev ? { ...prev, revealTxId } : null);
+
+          await callServerReveal(walletAddress, pendingReveal.paymentTxId, revealTxId);
+          return;
+        }
+
+        // Block-seed resume: the payment is on-chain; the server recomputes
+        // the draw and delivers (or asks for the opt-in).
+        await callServerReveal(walletAddress, pendingReveal.paymentTxId);
         return;
       }
 
-      /* --- Fresh loot box open --- */
+      /* ---- Fresh open ------------------------------------------------ */
 
-      /* 1. Fetch account info for opt-in check */
-      let accountInfo: Record<string, unknown> = {};
+      // Pre-flight: can this wallet actually afford the open? Check spendable
+      // balance (total minus the locked min-balance) before asking for a
+      // signature, so a short wallet gets a clear message instead of a cryptic
+      // wallet/chain rejection after signing.
       try {
-        accountInfo = (await algodClient
+        const acct = (await algodClient
           .accountInformation(walletAddress)
           .do()) as unknown as Record<string, unknown>;
-      } catch {
-        // Account may not exist yet
+        const microBalance = Number(acct.amount ?? 0);
+        const microMinBalance = Number(acct.minBalance ?? acct["min-balance"] ?? 100_000);
+        const neededMicro = lootboxConfig.cratePriceMicroAlgo + 10_000; // + fee headroom
+        if (microBalance - microMinBalance < neededMicro) {
+          throw new Error(
+            `Not enough ALGO in your wallet. You need about ${lootboxConfig.cratePrice} ALGO (plus a little for network fees) to open a loot box. Please top up and try again.`
+          );
+        }
+      } catch (balanceErr) {
+        if (balanceErr instanceof Error && balanceErr.message.startsWith("Not enough ALGO")) {
+          throw balanceErr;
+        }
+        // Account lookup failed (e.g. brand-new account) — let the flow
+        // proceed; the wallet/chain will reject an underfunded payment.
       }
 
-      const heldAssets = new Set<number>();
-      const assets =
-        accountInfo?.assets ?? accountInfo?.["created-assets"] ?? [];
-      if (Array.isArray(assets)) {
-        assets.forEach((a: Record<string, unknown>) => {
-          const id = a?.["asset-id"] ?? a?.assetId;
-          if (typeof id === "number") heldAssets.add(id);
-          else if (typeof id === "bigint") heldAssets.add(Number(id));
-        });
-      }
-
-      /* 2. Determine which prize assets need opt-in */
-      const uniqueAssetIds = Array.from(
-        new Set(
-          prizes.map((p) => p.assetId).filter((id) => id > 0)
-        )
-      );
-      const needsOptIn = uniqueAssetIds.filter((id) => !heldAssets.has(id));
-
-      /* 3. Build opt-in transactions in groups of MAX_GROUP_SIZE */
-      const suggestedParams = await algodClient.getTransactionParams().do();
-      const optInGroups: algosdk.Transaction[][] = [];
-      for (let i = 0; i < needsOptIn.length; i += MAX_GROUP_SIZE) {
-        const batch = needsOptIn.slice(i, i + MAX_GROUP_SIZE);
-        const txns = batch.map((assetId) =>
-          algosdk.makeAssetTransferTxnWithSuggestedParamsFromObject({
-            sender: walletAddress,
-            receiver: walletAddress,
-            assetIndex: assetId,
-            amount: 0,
-            suggestedParams,
-          })
-        );
-        if (txns.length > 1) algosdk.assignGroupID(txns);
-        optInGroups.push(txns);
-      }
-
-      /* 4. Build commit transactions */
       const commitRes = await fetch("/api/lootbox/commit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -430,6 +553,8 @@ export default function LootboxStudio() {
         throw new Error("Server returned an invalid commit response.");
       }
       const isLive = commitData.mode === "live";
+      const randomnessMode: RandomnessMode =
+        commitData.randomnessMode === "beacon" ? "beacon" : "block-seed";
 
       const paymentTxns = (commitData.unsignedTxns as string[]).map(
         (b64: string) =>
@@ -438,23 +563,18 @@ export default function LootboxStudio() {
           )
       );
 
-      /* 5. Combine all transactions for a single wallet prompt */
-      const allOptInTxns = ([] as algosdk.Transaction[]).concat(
-        ...optInGroups
-      );
-      const allTxns = [...allOptInTxns, ...paymentTxns];
-
-      if (allTxns.length === 0) {
-        throw new Error("No transactions to sign.");
-      }
-
-      const encodedForWallet = allTxns.map((txn) =>
-        algosdk.encodeUnsignedTransaction(txn)
-      );
-
+      // The wallet prompt: sign the payment (block-seed: a single payment;
+      // beacon: payment + commit app call, one prompt either way). The modal
+      // opens here, right as the wallet popup appears — no pre-flash.
+      setSignContext("payment");
+      setShowModal(true);
       setState("signing");
-      const signedAll = await signTransactions(encodedForWallet);
-      if (signedAll.length !== encodedForWallet.length) {
+      const signedAll = await signTransactions(
+        paymentTxns.map((txn) => algosdk.encodeUnsignedTransaction(txn))
+      );
+      // The user tapped Cancel while the wallet prompt was open — don't submit.
+      if (attemptRef.current !== myAttempt) return;
+      if (signedAll.length !== paymentTxns.length) {
         throw new Error("Wallet returned unexpected number of signed transactions.");
       }
       const signedFiltered = signedAll.map(function (s) {
@@ -462,81 +582,70 @@ export default function LootboxStudio() {
         return s;
       });
 
-      /* 6. Submit each opt-in group sequentially, then commit group */
-      let offset = 0;
-      for (let g = 0; g < optInGroups.length; g++) {
-        const group = optInGroups[g];
-        const groupSigned = signedFiltered.slice(
-          offset,
-          offset + group.length
-        );
-        const { txid } = await algodClient
-          .sendRawTransaction(groupSigned)
-          .do();
-        await algosdk.waitForConfirmation(
-          algodClient,
-          txid as string,
-          4
-        );
-        offset += group.length;
-      }
+      const paymentTxId =
+        (commitData.paymentTxId as string | undefined) ?? (commitData.txIds[0] as string);
 
-      /* 7. Submit commit group */
-      const commitSigned = signedFiltered.slice(
-        offset,
-        offset + paymentTxns.length
-      );
-      const paymentTxId = commitData.txIds[0] as string;
-
-      // Save a preliminary recovery record BEFORE submitting so that if the
-      // browser crashes between sendRawTransaction and waitForConfirmation
-      // the user's payment is not silently lost. commitRound 0 signals
+      // Save a recovery record BEFORE submitting so that if the browser
+      // crashes between sendRawTransaction and waitForConfirmation the
+      // user's payment is not silently lost. commitRound 0 signals
       // "submitted but not yet confirmed" to the recovery path.
       setPendingReveal({
         walletAddress,
         paymentTxId,
+        mode: randomnessMode,
         commitRound: 0,
       });
 
-      const { txid: commitTxid } = await algodClient
-        .sendRawTransaction(commitSigned)
+      setState("distributing");
+      const { txid: submitTxid } = await algodClient
+        .sendRawTransaction(signedFiltered)
         .do();
       const confirmResult = (await algosdk.waitForConfirmation(
         algodClient,
-        commitTxid as string,
+        submitTxid as string,
         10
       )) as unknown as Record<string, unknown>;
 
       commitSubmitted = true;
-      const commitRound = Number(confirmResult["confirmedRound"] ?? confirmResult["confirmed-round"] ?? 0);
+      const commitRound = Number(
+        confirmResult["confirmedRound"] ?? confirmResult["confirmed-round"] ?? 0
+      );
 
-      // Update with the real commit round now that it's confirmed
-      const pending: PendingReveal = {
+      setPendingReveal({
         walletAddress,
         paymentTxId,
+        mode: randomnessMode,
         commitRound,
-      };
-      setPendingReveal(pending);
+      });
 
       if (!isLive) {
-        // Preview mode: no on-chain reveal needed, call server directly
+        // Preview mode: no on-chain reveal needed, call server directly.
         await callServerReveal(walletAddress, paymentTxId);
         return;
       }
 
-      /* 8. Wait for VRF rounds */
-      setState("waiting-vrf");
-      await waitForVrfRounds(algodClient, commitRound);
+      if (randomnessMode === "beacon") {
+        setState("waiting-vrf");
+        await waitForVrfRounds(algodClient, commitRound);
 
-      /* 9. Build, sign, and submit on-chain reveal */
-      setState("revealing");
-      const revealTxId = await submitOnChainReveal(algodClient, walletAddress);
-      setPendingReveal((prev) => prev ? { ...prev, revealTxId } : null);
+        setState("revealing");
+        const revealTxId = await submitOnChainReveal(algodClient, walletAddress);
+        if (attemptRef.current !== myAttempt) return;
+        setPendingReveal((prev) => prev ? { ...prev, revealTxId } : null);
 
-      /* 10. Send to server for prize distribution */
-      await callServerReveal(walletAddress, paymentTxId, revealTxId);
+        await callServerReveal(walletAddress, paymentTxId, revealTxId);
+        return;
+      }
+
+      // Block-seed: the server waits for the next block seeds, draws the
+      // prize, and delivers it — nothing else to sign (unless an opt-in is
+      // needed for a won asset).
+      await callServerReveal(walletAddress, paymentTxId);
     } catch (err: unknown) {
+      // If this attempt was cancelled/superseded, swallow any late error.
+      if (attemptRef.current !== myAttempt) return;
       const msg = err instanceof Error ? err.message : "Something went wrong";
+      const lower = msg.toLowerCase();
 
       const isUserRejection =
         /cancel/i.test(msg) ||
@@ -546,8 +655,8 @@ export default function LootboxStudio() {
         /user.*close/i.test(msg);
 
       if (isUserRejection) {
-        // Only clear pendingReveal if the commit hasn't been submitted yet.
-        // If the user cancels the reveal signing after paying, they need
+        // Only clear pendingReveal if the payment hasn't been submitted yet.
+        // If the user declines a later signature after paying, they need
         // pendingReveal to retry and claim their prize.
         if (!commitSubmitted) {
           setPendingReveal(null);
@@ -557,12 +666,71 @@ export default function LootboxStudio() {
         return;
       }
 
-      setError(msg);
+      // A stuck wallet session (e.g. a "request pending" left by a sign that
+      // was abandoned by a reload) won't clear itself — surface a Reconnect
+      // action that resets the session so the next attempt starts clean.
+      const sessionStuck =
+        lower.includes("request pending") ||
+        lower.includes("another request") ||
+        lower.includes("request that is in progress") ||
+        lower.includes("no matching key") ||
+        lower.includes("session topic") ||
+        lower.includes("pairing");
+      if (sessionStuck) {
+        setWalletResetNeeded(true);
+        setError(
+          "Your wallet has a stuck request from an earlier attempt. Tap Reconnect Wallet to reset it, then open a loot box again."
+        );
+        setState("error");
+        setShowModal(true);
+        return;
+      }
+
+      console.error("[lootbox] open failed:", err);
+      setError(humanizeError(msg));
       setState("error");
+      // Ensure the error is visible even if it failed before the modal opened.
+      setShowModal(true);
     } finally {
-      processingRef.current = false;
+      // Only clear the guard if we're still the current attempt — a cancel may
+      // have started a fresh attempt that owns the flag now.
+      if (attemptRef.current === myAttempt) processingRef.current = false;
     }
-  }, [walletAddress, prizes, signTransactions, callServerReveal, pendingReveal]);
+  }, [walletAddress, signTransactions, callServerReveal, pendingReveal]);
+
+  /* ---------------------------------------------------------------- */
+  /*  Cancel a wallet-signature wait                                  */
+  /* ---------------------------------------------------------------- */
+
+  // Back out of a signature prompt that's going nowhere (e.g. the wallet app
+  // never opened). Bumping attemptRef invalidates the in-flight attempt so a
+  // signature that resolves later can't slip a payment through. Nothing is
+  // submitted in the payment phase, so the pending open is cleared; in the
+  // opt-in phase the payment already happened, so it's kept for resume.
+  const handleCancelSigning = useCallback(() => {
+    attemptRef.current += 1;
+    processingRef.current = false;
+    setShowModal(false);
+    setState("idle");
+    setError(null);
+    if (signContext === "payment") setPendingReveal(null);
+  }, [signContext]);
+
+  /* ---------------------------------------------------------------- */
+  /*  Reset a stuck wallet session                                    */
+  /* ---------------------------------------------------------------- */
+
+  const handleResetWallet = useCallback(async () => {
+    setShowModal(false);
+    setState("idle");
+    setError(null);
+    setWalletResetNeeded(false);
+    try {
+      await disconnectWallet();
+    } catch {
+      // best effort — the user can disconnect manually
+    }
+  }, [disconnectWallet]);
 
   /* ---------------------------------------------------------------- */
   /*  Retry handler                                                   */
@@ -593,6 +761,8 @@ export default function LootboxStudio() {
     setState("idle");
     setResult(null);
     setError(null);
+    setPendingPrize(null);
+    setWalletResetNeeded(false);
   }, [state]);
 
   // "Play Again" fires after closeModal settles state to idle + pendingReveal=null.
@@ -615,6 +785,11 @@ export default function LootboxStudio() {
     state === "revealing" ||
     state === "distributing";
 
+  // Once the won prize is known but not yet delivered (the opt-in + delivery
+  // steps), show it the whole time instead of a generic spinner.
+  const showClaim =
+    !!pendingPrize && (state === "signing" || state === "distributing");
+
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
       {/* Header */}
@@ -626,11 +801,6 @@ export default function LootboxStudio() {
             {lootboxConfig.cratePrice} ALGO
           </span>
         </p>
-        {cratesOpened > 0 && (
-          <p className="mt-1 text-xs text-zinc-500">
-            Opened this session: {cratesOpened}
-          </p>
-        )}
       </div>
 
       <div className="grid gap-8 lg:grid-cols-5">
@@ -656,12 +826,12 @@ export default function LootboxStudio() {
             {/* Status text */}
             {state === "committing" && (
               <p className="text-sm text-zinc-400">
-                Building transaction...
+                Getting ready...
               </p>
             )}
             {state === "signing" && (
               <p className="text-sm text-zinc-400">
-                Approve the transaction in your wallet...
+                Approve in your wallet...
               </p>
             )}
             {state === "waiting-vrf" && (
@@ -676,7 +846,7 @@ export default function LootboxStudio() {
             )}
             {state === "distributing" && (
               <p className="text-sm text-zinc-400">
-                Distributing your prize...
+                Opening your loot box...
               </p>
             )}
             {state === "idle" && (
@@ -697,6 +867,8 @@ export default function LootboxStudio() {
             >
               {!walletAddress
                 ? "Connect Wallet"
+                : state === "committing"
+                ? "Opening…"
                 : isProcessing
                 ? "Processing..."
                 : pendingReveal && pendingReveal.walletAddress === walletAddress
@@ -803,7 +975,13 @@ export default function LootboxStudio() {
       {/*  Reveal modal                                                */}
       {/* ------------------------------------------------------------ */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+        <div
+          className={`fixed inset-0 z-50 flex items-center justify-center ${
+            // Drop the blur while the wallet's signing popup is open so the
+            // wallet UI renders crisply on top of our overlay.
+            state === "signing" ? "bg-black/40" : "bg-black/70 backdrop-blur-sm"
+          }`}
+        >
           <div className="relative mx-4 w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-950 p-8">
             {/* Close button */}
             {(state === "success" || state === "error") && (
@@ -816,21 +994,52 @@ export default function LootboxStudio() {
               </button>
             )}
 
-            {/* Committing state */}
-            {state === "committing" && (
-              <div className="flex flex-col items-center gap-4 py-6">
-                <div className="h-12 w-12 animate-spin rounded-full border-4 border-indigo-500 border-t-transparent" />
+            {/* Won prize awaiting opt-in / delivery */}
+            {showClaim && pendingPrize && (
+              <div className="flex flex-col items-center gap-4 py-4 text-center">
                 <p className="text-xs font-semibold uppercase tracking-widest text-indigo-400">
-                  Building Transaction
+                  You Won!
                 </p>
-                <p className="text-sm text-zinc-400">
-                  Preparing your loot box transaction...
+                <div
+                  className={`flex h-24 w-24 items-center justify-center rounded-2xl border-2 ${
+                    RARITY_BG[pendingPrize.rarity]
+                  } ${RARITY_GLOW[pendingPrize.rarity]}`}
+                >
+                  <span className="text-4xl select-none">
+                    {RARITY_EMOJI[pendingPrize.rarity]}
+                  </span>
+                </div>
+                <div>
+                  <p
+                    className="text-xs font-semibold uppercase tracking-widest"
+                    style={{ color: pendingPrize.color }}
+                  >
+                    {pendingPrize.rarity}
+                  </p>
+                  <h3 className="mt-1 text-xl font-bold text-zinc-100">
+                    {pendingPrize.name}
+                  </h3>
+                </div>
+                <p className="max-w-[300px] text-sm text-zinc-400">
+                  {state === "signing"
+                    ? "One tap to receive it — approve the opt-in in your wallet. There's no charge for this step."
+                    : "Delivering it to your wallet — just a moment…"}
                 </p>
+                {state === "signing" && (
+                  // The payment is done and the prize is held for this wallet —
+                  // backing out keeps it claimable later via Retry.
+                  <button
+                    onClick={handleCancelSigning}
+                    className="text-xs uppercase tracking-widest text-zinc-500 underline-offset-4 transition hover:text-zinc-300 hover:underline"
+                  >
+                    Do this later
+                  </button>
+                )}
               </div>
             )}
 
-            {/* Waiting for wallet approval */}
-            {state === "signing" && (
+            {/* Waiting for wallet approval (payment) */}
+            {!showClaim && state === "signing" && (
               <div className="flex flex-col items-center gap-4 py-6">
                 <div className="h-12 w-12 animate-pulse rounded-full border-4 border-indigo-400/50 bg-indigo-500/10" />
                 <p className="text-xs font-semibold uppercase tracking-widest text-indigo-400">
@@ -844,10 +1053,18 @@ export default function LootboxStudio() {
                     Cost: <span className="font-semibold text-zinc-100">{lootboxConfig.cratePrice} ALGO</span>
                   </p>
                 </div>
+                {/* Always give an escape hatch while waiting on the wallet —
+                    if the wallet app never opens, the user isn't trapped. */}
+                <button
+                  onClick={handleCancelSigning}
+                  className="mt-1 text-xs uppercase tracking-widest text-zinc-500 underline-offset-4 transition hover:text-zinc-300 hover:underline"
+                >
+                  Cancel
+                </button>
               </div>
             )}
 
-            {/* Waiting for VRF randomness */}
+            {/* Beacon mode: waiting for the VRF round */}
             {state === "waiting-vrf" && (
               <div className="flex flex-col items-center gap-4 py-6">
                 <div className="h-12 w-12 animate-spin rounded-full border-4 border-amber-500 border-t-transparent" />
@@ -855,36 +1072,36 @@ export default function LootboxStudio() {
                   Generating Randomness
                 </p>
                 <p className="text-sm text-zinc-400">
-                  {vrfProgress || "Waiting for on-chain VRF seed..."}
+                  {vrfProgress || "Waiting for the on-chain VRF round..."}
                 </p>
                 <p className="text-xs text-zinc-600">
-                  This takes about 30 seconds
+                  This takes about 30 seconds — please keep this window open
                 </p>
               </div>
             )}
 
-            {/* Revealing state */}
+            {/* Beacon mode: signing the on-chain reveal */}
             {state === "revealing" && (
               <div className="flex flex-col items-center gap-4 py-6">
                 <div className="h-12 w-12 animate-pulse rounded-full border-4 border-indigo-400/50 bg-indigo-500/10" />
                 <p className="text-xs font-semibold uppercase tracking-widest text-indigo-400">
-                  Reveal
+                  Almost There
                 </p>
                 <p className="text-sm text-zinc-400">
-                  Approve the reveal transaction in your wallet...
+                  Approve the reveal in your wallet — there&apos;s no charge for this step.
                 </p>
               </div>
             )}
 
-            {/* Distributing state */}
-            {state === "distributing" && (
+            {/* Drawing + delivering the prize (one screen, no flicker) */}
+            {!showClaim && (state === "committing" || state === "distributing") && (
               <div className="flex flex-col items-center gap-4 py-6">
                 <div className="h-12 w-12 animate-spin rounded-full border-4 border-indigo-500 border-t-transparent" />
                 <p className="text-xs font-semibold uppercase tracking-widest text-indigo-400">
-                  Distributing Prize
+                  Opening Your Loot Box
                 </p>
-                <p className="text-sm text-zinc-400">
-                  Sending your prize...
+                <p className="max-w-[300px] text-center text-sm italic text-zinc-300">
+                  {quip}
                 </p>
               </div>
             )}
@@ -902,13 +1119,7 @@ export default function LootboxStudio() {
                   } ${RARITY_GLOW[result.prize.rarity]}`}
                 >
                   <span className="text-4xl select-none">
-                    {result.prize.rarity === "legendary"
-                      ? "⭐"
-                      : result.prize.rarity === "epic"
-                      ? "✨"
-                      : result.prize.rarity === "rare"
-                      ? "\u{1F48E}"
-                      : "\u{1F381}"}
+                    {RARITY_EMOJI[result.prize.rarity]}
                   </span>
                 </div>
 
@@ -971,7 +1182,7 @@ export default function LootboxStudio() {
                 <p className="text-sm text-red-400">
                   {error || "Something went wrong"}
                 </p>
-                {pendingReveal && pendingReveal.walletAddress === walletAddress && (
+                {pendingReveal && pendingReveal.walletAddress === walletAddress && !walletResetNeeded && (
                   <div className="w-full rounded-lg border border-emerald-900/30 bg-emerald-950/20 px-4 py-2.5">
                     <p className="text-xs text-emerald-400/80">
                       Your payment went through. Tap Retry to claim your
@@ -987,10 +1198,14 @@ export default function LootboxStudio() {
                     Close
                   </button>
                   <button
-                    onClick={handleRetry}
+                    onClick={walletResetNeeded ? handleResetWallet : handleRetry}
                     className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-500 transition-colors"
                   >
-                    {pendingReveal && pendingReveal.walletAddress === walletAddress ? "Retry" : "Try Again"}
+                    {walletResetNeeded
+                      ? "Reconnect Wallet"
+                      : pendingReveal && pendingReveal.walletAddress === walletAddress
+                      ? "Retry"
+                      : "Try Again"}
                   </button>
                 </div>
               </div>
