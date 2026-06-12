@@ -479,8 +479,11 @@ export default function LootboxStudio() {
           const status = (await algodClient.status().do()) as unknown as Record<string, unknown>;
           const currentRound = Number(status["lastRound"] ?? status["last-round"] ?? 0);
           if (currentRound > pendingReveal.commitRound + 900) {
+            const lostPaymentTxId = pendingReveal.paymentTxId;
             setPendingReveal(null);
-            throw new Error("Your previous session expired. Please open a new loot box.");
+            throw new Error(
+              `Your previous session expired before the prize could be claimed. Please contact support with this payment ID: ${lostPaymentTxId}`
+            );
           }
 
           if (pendingReveal.revealTxId) {
@@ -496,7 +499,22 @@ export default function LootboxStudio() {
           await waitForVrfRounds(algodClient, pendingReveal.commitRound);
 
           setState("revealing");
-          const revealTxId = await submitOnChainReveal(algodClient, walletAddress);
+          let revealTxId: string;
+          try {
+            revealTxId = await submitOnChainReveal(algodClient, walletAddress);
+          } catch (revealErr) {
+            // The server has since switched to block-seed mode: there's no
+            // on-chain reveal anymore, but the payment is still redeemable —
+            // the block-seed draw derives from the payment itself.
+            if (
+              revealErr instanceof Error &&
+              revealErr.message.includes("only used in beacon mode")
+            ) {
+              await callServerReveal(walletAddress, pendingReveal.paymentTxId);
+              return;
+            }
+            throw revealErr;
+          }
           if (attemptRef.current !== myAttempt) return;
           setPendingReveal((prev) => prev ? { ...prev, revealTxId } : null);
 
@@ -629,7 +647,21 @@ export default function LootboxStudio() {
         await waitForVrfRounds(algodClient, commitRound);
 
         setState("revealing");
-        const revealTxId = await submitOnChainReveal(algodClient, walletAddress);
+        let revealTxId: string;
+        try {
+          revealTxId = await submitOnChainReveal(algodClient, walletAddress);
+        } catch (revealErr) {
+          // Server switched to block-seed mid-flight — the payment is still
+          // redeemable via the block-seed draw.
+          if (
+            revealErr instanceof Error &&
+            revealErr.message.includes("only used in beacon mode")
+          ) {
+            await callServerReveal(walletAddress, paymentTxId);
+            return;
+          }
+          throw revealErr;
+        }
         if (attemptRef.current !== myAttempt) return;
         setPendingReveal((prev) => prev ? { ...prev, revealTxId } : null);
 

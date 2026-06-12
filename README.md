@@ -71,6 +71,21 @@ The app starts in **preview mode** by default -- trait swaps and loot box openin
 
 ---
 
+## Going Live (Loot Box)
+
+The default **block-seed** mode needs no smart contract — going live is just configuration:
+
+1. **Create a master wallet** (separate from your manager wallet), fund it with ALGO for transaction fees and min-balance, and send it the prize tokens/NFTs. Set `LOOTBOX_MASTER_MNEMONIC`.
+2. **Set your treasury** — `TREASURY_ADDRESS` receives the crate payments.
+3. **Configure prizes** — edit `config/lootbox.ts` (asset IDs, amounts, weights, rarities) or use the admin panel at `/lootbox/admin` (set `NEXT_PUBLIC_ADMIN_WALLETS`; add `BLOB_READ_WRITE_TOKEN` so prize edits persist across deploys).
+4. **Set the price** — `LOOTBOX_PRICE_ALGO`, and keep `cratePrice` / `cratePriceMicroAlgo` in `config/lootbox.ts` in sync (the UI shows the config values).
+5. **Test on TestNet** — point the `NEXT_PUBLIC_*` node URLs at TestNet, set `LOOTBOX_LIVE_ENABLED=true`, and click through a full open with a test wallet.
+6. **Flip to MainNet** — switch the node URLs back, redeploy, open one loot box yourself end-to-end.
+
+For **beacon** mode, do all of the above plus deploy the contract ([Smart Contract Deployment](#smart-contract-deployment-beacon-mode-only)) and set `LOOTBOX_RANDOMNESS_MODE=beacon` and `LOOTBOX_CONTRACT_APP_ID`.
+
+---
+
 ## Environment Variables
 
 Copy `.env.example` to `.env.local` and configure:

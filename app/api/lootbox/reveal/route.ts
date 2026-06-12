@@ -37,8 +37,20 @@ const CRATE_PRICE_MICRO = Math.round(
 const ALGO_TXID_REGEX = /^[A-Z2-7]{52}$/;
 const ABI_RETURN_PREFIX = Buffer.from("151f7c75", "hex");
 const REVEAL_SELECTOR_B64 = Buffer.from("750ec9b5", "hex").toString("base64");
-const MAX_PAYMENT_AGE_SECONDS = 600;
-const MAX_REVEAL_AGE_SECONDS = 300;
+// How long an UNDELIVERED payment stays redeemable. Generous on purpose: a
+// user whose browser crashed mid-open must be able to come back later and
+// still claim — replay of already-redeemed payments is blocked by the on-chain
+// distribution note + the payment-keyed lease, not by this age limit, so a
+// long window costs nothing in safety.
+const MAX_PAYMENT_AGE_SECONDS = 86_400;
+// Same reasoning as the payment window: the reveal's VRF value is on-chain and
+// immutable, so reading it later is equally valid — and a user who crashed
+// right after their on-chain reveal must still be able to claim. The contract
+// consumed their commit box, so a rejected-by-age reveal would be unclaimable
+// forever. Grinding is not a concern: the contract requires the full crate
+// price inside every commit group, so extra commits never improve expected
+// value.
+const MAX_REVEAL_AGE_SECONDS = 86_400;
 
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT_WINDOW_MS = 60_000;
@@ -363,6 +375,11 @@ export async function POST(request: NextRequest) {
       // confirmed round, mixed with the payment txid. verifyPayment above
       // already proved the payment is real, recent, correctly addressed, and
       // confirmed — its round anchors the draw.
+      //
+      // Any revealTxId in the request is deliberately ignored here (not
+      // rejected): a client resuming a beacon-era open after the server
+      // switched modes still has a perfectly valid payment, and the
+      // block-seed draw redeems it without the on-chain reveal.
       if (!txnInfo.confirmedRound) {
         throw new Error("Payment transaction not confirmed. Please try again.");
       }
@@ -384,6 +401,13 @@ export async function POST(request: NextRequest) {
     // contract's logged VRF value) over the deliverable pool — so a repeat call
     // for the same payment recomputes the SAME prize. That's what makes the
     // opt-in round-trip below safe without any server-side prize lock.
+    //
+    // Known edge: if the deliverable pool changes in the seconds between the
+    // roll and the post-opt-in claim (a concurrent winner drains the same
+    // one-of-one NFT, or an admin edits the pool), the recompute can land on a
+    // different — still fairly drawn — prize than the one first shown. Never a
+    // double payout (lease + distribution note) and never a loss; the success
+    // screen always shows what was actually delivered.
     const prize = resolvePrize(deliverable, randomValue);
 
     // ASA prizes can only be received by accounts opted into the asset. If the
