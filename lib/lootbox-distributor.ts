@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import algosdk from "algosdk";
 import type { PrizeTier } from "./types";
 import { INDEXER_BASE_URL } from "./algorand";
@@ -42,7 +43,16 @@ export async function findExistingDistribution(
       `${INDEXER_BASE_URL}/v2/transactions` +
       `?address=${masterAddress}&address-role=sender` +
       `&note-prefix=${encodeURIComponent(notePrefixB64)}&limit=1`;
-    const res = await fetch(url);
+    // Abort a slow indexer rather than letting one stuck request consume the
+    // serverless function's whole time budget.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4000);
+    let res: Response;
+    try {
+      res = await fetch(url, { cache: "no-store", signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+    }
     if (!res.ok) return null;
     const data = await res.json();
     const txn = data?.transactions?.[0];
@@ -163,6 +173,13 @@ export async function distributePrize({
   const suggestedParams = await algodClient.getTransactionParams().do();
   const note = new TextEncoder().encode(buildDistributionNote(paymentTxId, prize.id));
 
+  // Lease = an on-chain mutex keyed to the payment. The chain confirms at most
+  // ONE transaction per (sender, lease) within a validity window, so even two
+  // server instances that both passed the indexer idempotency check (indexer
+  // lag) and built DIFFERENT transactions for the same payment can't both pay
+  // out — the second is rejected by consensus, not by our bookkeeping.
+  const lease = new Uint8Array(createHash("sha256").update(paymentTxId).digest());
+
   // Build and sign the transfer ONCE so every retry resends the *same* txid.
   // Algorand dedupes by txid, so even if a send's waitForConfirmation timed out
   // on a txn that actually landed, resending can never produce a second
@@ -175,6 +192,7 @@ export async function distributePrize({
           amount: prize.amount,
           suggestedParams,
           note,
+          lease,
         })
       : algosdk.makeAssetTransferTxnWithSuggestedParamsFromObject({
           sender: masterAddr,
@@ -183,6 +201,7 @@ export async function distributePrize({
           amount: prize.type === "nft" ? 1 : prize.amount,
           suggestedParams,
           note,
+          lease,
         });
 
   const signedTxn = txn.signTxn(masterAccount.sk);

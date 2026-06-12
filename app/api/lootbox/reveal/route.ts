@@ -425,17 +425,67 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    let deliveredPrize = prize;
     let distributionTxId: string;
     try {
       const masterAccount = getLootboxMasterAccount();
-      const distResult = await distributePrize({
-        prize,
-        recipientAddress: walletAddress,
-        masterAccount,
-        algodClient,
-        paymentTxId,
-      });
-      distributionTxId = distResult.txId;
+      try {
+        const distResult = await distributePrize({
+          prize,
+          recipientAddress: walletAddress,
+          masterAccount,
+          algodClient,
+          paymentTxId,
+        });
+        distributionTxId = distResult.txId;
+      } catch (nftErr: unknown) {
+        // Auto-recovery: a won NFT can become undeliverable in the window
+        // between the draw and the transfer (a concurrent winner took the
+        // master's only copy). Rather than leaving a paid buyer with nothing,
+        // re-map the SAME random value over the token tiers — fungible, always
+        // in stock, no uniqueness race — and deliver that instead. Safe against
+        // double-sends: distributePrize checks for a prior on-chain delivery
+        // first, and the payment-keyed lease blocks concurrent duplicates.
+        const nftOutOfStock =
+          prize.type === "nft" &&
+          nftErr instanceof Error &&
+          nftErr.message.includes("insufficient balance");
+        const tokenTiers = deliverable.filter((p) => p.type !== "nft");
+        if (!nftOutOfStock || tokenTiers.length === 0) throw nftErr;
+
+        console.warn(
+          `[lootbox/reveal] NFT ${prize.assetId} undeliverable for ${paymentTxId}; re-rolling to a token prize.`
+        );
+        deliveredPrize = resolvePrize(tokenTiers, randomValue);
+
+        // The fallback may itself be an ASA the winner isn't opted into.
+        if (
+          deliveredPrize.assetId > 0 &&
+          !(await isOptedIn(walletAddress, deliveredPrize.assetId))
+        ) {
+          return NextResponse.json({
+            status: "needs-optin",
+            assetId: deliveredPrize.assetId,
+            prize: {
+              id: deliveredPrize.id,
+              name: deliveredPrize.name,
+              type: deliveredPrize.type,
+              rarity: deliveredPrize.rarity,
+              color: deliveredPrize.color,
+            },
+            paymentTxId,
+          });
+        }
+
+        const fallbackResult = await distributePrize({
+          prize: deliveredPrize,
+          recipientAddress: walletAddress,
+          masterAccount,
+          algodClient,
+          paymentTxId,
+        });
+        distributionTxId = fallbackResult.txId;
+      }
     } catch (distErr: unknown) {
       console.error("[lootbox/reveal] Distribution failed:", distErr);
       // The in-flight locks are released in `finally`, so the user can safely
@@ -445,11 +495,11 @@ export async function POST(request: NextRequest) {
         {
           error: "Prize distribution failed. Please contact support.",
           prize: {
-            id: prize.id,
-            name: prize.name,
-            type: prize.type,
-            rarity: prize.rarity,
-            color: prize.color,
+            id: deliveredPrize.id,
+            name: deliveredPrize.name,
+            type: deliveredPrize.type,
+            rarity: deliveredPrize.rarity,
+            color: deliveredPrize.color,
           },
           paymentTxId,
         },
@@ -459,11 +509,11 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       prize: {
-        id: prize.id,
-        name: prize.name,
-        type: prize.type,
-        rarity: prize.rarity,
-        color: prize.color,
+        id: deliveredPrize.id,
+        name: deliveredPrize.name,
+        type: deliveredPrize.type,
+        rarity: deliveredPrize.rarity,
+        color: deliveredPrize.color,
       },
       paymentTxId,
       distributionTxId,
@@ -611,14 +661,18 @@ async function verifyPayment(
   expectedReceiver: string,
   expectedAmountMicroAlgo: number
 ): Promise<{ ok: boolean; reason?: string; group?: string; confirmedRound?: number }> {
-  const MAX_RETRIES = 12;
+  // The client waits for on-chain confirmation before calling reveal, so a real
+  // payment is normally found on the first attempt — the retries only cover
+  // indexer lag. Capped so verification can never consume the whole function
+  // budget (the route still has randomness + distribution to do).
+  const MAX_RETRIES = 8;
   const BASE_DELAY_MS = 2000;
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     const delay = BASE_DELAY_MS + Math.random() * 1000;
     try {
       const indexerUrl = `${INDEXER_BASE_URL}/v2/transactions/${txId}`;
-      const res = await fetch(indexerUrl);
+      const res = await fetchWithTimeout(indexerUrl);
 
       if (!res.ok) {
         if (attempt < MAX_RETRIES - 1) {
@@ -710,14 +764,14 @@ async function verifyRevealTransaction(
   expectedSender: string,
   expectedAppId: number
 ): Promise<{ returnValue: bigint }> {
-  const MAX_RETRIES = 10;
+  const MAX_RETRIES = 8;
   const BASE_DELAY_MS = 2000;
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     const delay = BASE_DELAY_MS + Math.random() * 1000;
     try {
       const indexerUrl = `${INDEXER_BASE_URL}/v2/transactions/${txId}`;
-      const res = await fetch(indexerUrl);
+      const res = await fetchWithTimeout(indexerUrl);
 
       if (!res.ok) {
         if (attempt < MAX_RETRIES - 1) {
