@@ -132,9 +132,12 @@ export async function POST(request: Request) {
         );
       }
 
+      // ARC-4 selector for commit(pay)void — the payment is passed as a
+      // transaction argument (the txn immediately before this call in the
+      // group), so it appears in the signature but not in appArgs.
       const commitSelector = new Uint8Array(
         Buffer.from(
-          crypto.createHash("sha512-256").update("commit()void").digest()
+          crypto.createHash("sha512-256").update("commit(pay)void").digest()
         ).subarray(0, 4)
       );
       const senderPk = algosdk.decodeAddress(walletAddress).publicKey;

@@ -71,9 +71,14 @@ async function getBeaconAppId(
     const params = (app["params"] ?? {}) as Record<string, unknown>;
     const globalState = (params["globalState"] ??
       params["global-state"] ??
-      []) as Array<{ key: string; value: { uint?: number | bigint } }>;
+      []) as Array<{ key: string | Uint8Array; value: { uint?: number | bigint } }>;
+    // algosdk v3 returns state keys as raw bytes; the REST shape is base64.
     const beaconKey = Buffer.from("beacon").toString("base64");
-    const entry = globalState.find((kv) => kv.key === beaconKey);
+    const entry = globalState.find((kv) => {
+      const keyB64 =
+        typeof kv.key === "string" ? kv.key : Buffer.from(kv.key).toString("base64");
+      return keyB64 === beaconKey;
+    });
     const id = entry?.value?.uint != null ? Number(entry.value.uint) : 0;
     if (id > 0) {
       cachedBeaconAppId = id;
